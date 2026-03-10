@@ -1,5 +1,7 @@
-from aiogram import Router, F
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
+﻿from aiogram import F, Router
+from aiogram.types import KeyboardButton, Message, ReplyKeyboardMarkup
+
+from bot.api_client import get_bot_settings
 
 router = Router()
 
@@ -18,4 +20,12 @@ menu = ReplyKeyboardMarkup(
 
 @router.message(F.text == "/start")
 async def start(msg: Message):
-    await msg.answer("Добро пожаловать! Выберите пункт меню 👇", reply_markup=menu)
+    text = "Добро пожаловать! Выберите пункт меню 👇"
+    try:
+        settings = await get_bot_settings()
+        if isinstance(settings, dict) and settings.get("start_message"):
+            text = settings["start_message"]
+    except Exception:
+        pass
+
+    await msg.answer(text, reply_markup=menu)

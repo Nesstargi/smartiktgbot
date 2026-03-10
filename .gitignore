@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual env
+venv/
+.env
+
+# Local database and runtime artifacts
+*.sqlite3
+backend/media/
+
+# Frontend
+admin-panel/node_modules/
+admin-panel/dist/
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/

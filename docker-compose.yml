@@ -1,0 +1,39 @@
+﻿services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: smartiktg-backend
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./db.sqlite3:/app/db.sqlite3
+      - ./backend/media:/app/backend/media
+    restart: unless-stopped
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    container_name: smartiktg-bot
+    env_file:
+      - .env
+    depends_on:
+      - backend
+    volumes:
+      - ./db.sqlite3:/app/db.sqlite3
+      - ./backend/media:/app/backend/media
+    restart: unless-stopped
+
+  admin:
+    build:
+      context: ./admin-panel
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    container_name: smartiktg-admin
+    ports:
+      - "5173:80"
+    restart: unless-stopped
