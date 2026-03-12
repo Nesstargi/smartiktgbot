@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   createAdminUser,
@@ -30,6 +30,18 @@ function normalizePermissions(values) {
   return Array.from(new Set(values)).sort();
 }
 
+function getErrorMessage(error) {
+  const detail = error?.response?.data?.detail;
+  if (Array.isArray(detail)) {
+    const messages = detail.map((item) => item?.msg).filter(Boolean);
+    if (messages.length) return messages.join(", ");
+    return "Ошибка валидации";
+  }
+  if (detail) return detail;
+  if (error?.message) return error.message;
+  return "Не удалось создать администратора";
+}
+
 export default function UsersPage() {
   const [users, setUsers] = useState([]);
   const [availablePermissions, setAvailablePermissions] = useState([]);
@@ -39,6 +51,9 @@ export default function UsersPage() {
   const [password, setPassword] = useState("");
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [selectedPermissions, setSelectedPermissions] = useState([]);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const [createSuccess, setCreateSuccess] = useState("");
 
   const [editingUserId, setEditingUserId] = useState(null);
   const [editingPermissions, setEditingPermissions] = useState([]);
@@ -71,18 +86,29 @@ export default function UsersPage() {
     e.preventDefault();
     if (!canSubmit) return;
 
-    await createAdminUser({
-      email: email.trim(),
-      password: password.trim(),
-      is_super_admin: isSuperAdmin,
-      permissions: normalizePermissions(selectedPermissions),
-    });
+    setCreateError("");
+    setCreateSuccess("");
+    setCreating(true);
 
-    setEmail("");
-    setPassword("");
-    setIsSuperAdmin(false);
-    setSelectedPermissions([]);
-    await load();
+    try {
+      await createAdminUser({
+        email: email.trim(),
+        password: password.trim(),
+        is_super_admin: isSuperAdmin,
+        permissions: normalizePermissions(selectedPermissions),
+      });
+
+      setEmail("");
+      setPassword("");
+      setIsSuperAdmin(false);
+      setSelectedPermissions([]);
+      setCreateSuccess("Администратор создан");
+      await load();
+    } catch (error) {
+      setCreateError(getErrorMessage(error));
+    } finally {
+      setCreating(false);
+    }
   };
 
   const onStartEditPermissions = (user) => {
@@ -170,9 +196,11 @@ export default function UsersPage() {
             ))}
           </div>
 
-          <button type="submit" disabled={!canSubmit}>
-            Создать
+          <button type="submit" disabled={!canSubmit || creating}>
+            {creating ? "Создание..." : "Создать"}
           </button>
+          {createError && <p className="error-text">{createError}</p>}
+          {createSuccess && <p className="success-text">{createSuccess}</p>}
         </form>
       </article>
 
@@ -248,3 +276,4 @@ export default function UsersPage() {
     </section>
   );
 }
+

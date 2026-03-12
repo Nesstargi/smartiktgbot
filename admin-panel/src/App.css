@@ -218,3 +218,12 @@ button:hover {
   display: flex;
   justify-content: flex-end;
 }
+
+.success-text {
+  color: #111;
+  background: #e9f7e7;
+  border: 1px solid #111;
+  padding: 8px;
+  margin: 0;
+}
+

@@ -1,0 +1,116 @@
+cat > fix.patch <<'PATCH'
+diff --git a/admin-panel/src/utils/media.js b/admin-panel/src/utils/media.js
+index 1ec448c..afa4574 100644
+--- a/admin-panel/src/utils/media.js
++++ b/admin-panel/src/utils/media.js
+@@ -1,10 +1,11 @@
+-﻿export function buildMediaUrl(pathOrUrl) {
++export function buildMediaUrl(pathOrUrl) {
+   if (!pathOrUrl) return "";
+   if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) {
+     return pathOrUrl;
+   }
+
+   const base = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
+-  const path = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
++  const normalized = pathOrUrl.includes("/") ? pathOrUrl : `/media/${pathOrUrl}`;
++  const path = normalized.startsWith("/") ? normalized : `/${normalized}`;
+   return `${base}${path}`;
+ }
+diff --git a/backend/api/admin/auth.py b/backend/api/admin/auth.py
+index 2a505d6..fca3e12 100644
+--- a/backend/api/admin/auth.py
++++ b/backend/api/admin/auth.py
+@@ -1,4 +1,4 @@
+-﻿import time
++import time
+ from collections import defaultdict, deque
+ from threading import Lock
+
+@@ -73,7 +73,8 @@ def _user_roles_permissions(user: User):
+
+ @router.post("/login")
+ def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
+-    key = _rate_limit_key(request, data.email)
++    normalized_email = data.email.strip().lower()
++    key = _rate_limit_key(request, normalized_email)
+     now = time.monotonic()
+
+     with _lock:
+@@ -83,7 +84,7 @@ def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
+                 detail="Too many login attempts. Try again later.",
+             )
+
+-    user = db.query(User).filter(User.email == data.email).first()
++    user = db.query(User).filter(User.email.ilike(normalized_email)).first()
+
+     if not user or not verify_password(data.password, user.hashed_password):
+         with _lock:
+diff --git a/backend/api/admin/users.py b/backend/api/admin/users.py
+index 96794c7..1964abd 100644
+--- a/backend/api/admin/users.py
++++ b/backend/api/admin/users.py
+@@ -1,4 +1,5 @@
+-﻿from fastapi import APIRouter, Depends, HTTPException
++from fastapi import APIRouter, Depends, HTTPException
++from sqlalchemy import func
+ from sqlalchemy.orm import Session
+
+ from backend.core.deps import ALL_PERMISSIONS, require_super_admin
+@@ -71,11 +72,13 @@ def create_user(
+ ):
+     _validate_permissions(data.permissions)
+
+-    existing = db.query(User).filter(User.email == data.email).first()
++    normalized_email = data.email.strip().lower()
++
++    existing = db.query(User).filter(func.lower(User.email) == normalized_email).first()
+     if existing:
+         raise HTTPException(status_code=400, detail="Email already exists")
+
+-    user = User(email=data.email, hashed_password=hash_password(data.password), is_active=True)
++    user = User(email=normalized_email, hashed_password=hash_password(data.password), is_active=True)
+     db.add(user)
+     db.commit()
+     db.refresh(user)
+diff --git a/bot/handlers/catalog_common.py b/bot/handlers/catalog_common.py
+index 9a9798d..1330dbe 100644
+--- a/bot/handlers/catalog_common.py
++++ b/bot/handlers/catalog_common.py
+@@ -1,5 +1,6 @@
+-﻿import asyncio
++import asyncio
+ from pathlib import Path
++from urllib.parse import urlparse
+
+ from aiogram import Router
+ from aiogram.types import (
+@@ -56,11 +57,28 @@ def full_media_url(path_or_url: str | None):
+         return path_or_url
+     if path_or_url.startswith("/"):
+         return f"{API_URL}{path_or_url}"
+-    return path_or_url
++
++    # Поддержка старых записей, где в БД хранится только имя файла.
++    if "/" not in path_or_url:
++        return f"{API_URL}/media/{path_or_url}"
++
++    return f"{API_URL}/{path_or_url.lstrip('/')}"
+
+
+ def is_local_url(url: str) -> bool:
+-    return "127.0.0.1" in url or "localhost" in url
++    parsed_url = urlparse(url)
++    parsed_api = urlparse(API_URL)
++
++    hostname = (parsed_url.hostname or "").lower()
++    api_hostname = (parsed_api.hostname or "").lower()
++
++    if hostname in {"127.0.0.1", "localhost", "0.0.0.0", "backend"}:
++        return True
++
++    if api_hostname and hostname == api_hostname:
++        return True
++
++    return False
+PATCH
