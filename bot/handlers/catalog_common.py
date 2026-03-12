@@ -1,5 +1,6 @@
-﻿import asyncio
+import asyncio
 from pathlib import Path
+from urllib.parse import urlparse
 
 from aiogram import Router
 from aiogram.types import (
@@ -56,11 +57,28 @@ def full_media_url(path_or_url: str | None):
         return path_or_url
     if path_or_url.startswith("/"):
         return f"{API_URL}{path_or_url}"
-    return path_or_url
+
+    # Поддержка старых записей, где в БД хранится только имя файла.
+    if "/" not in path_or_url:
+        return f"{API_URL}/media/{path_or_url}"
+
+    return f"{API_URL}/{path_or_url.lstrip('/')}"
 
 
 def is_local_url(url: str) -> bool:
-    return "127.0.0.1" in url or "localhost" in url
+    parsed_url = urlparse(url)
+    parsed_api = urlparse(API_URL)
+
+    hostname = (parsed_url.hostname or "").lower()
+    api_hostname = (parsed_api.hostname or "").lower()
+
+    if hostname in {"127.0.0.1", "localhost", "0.0.0.0", "backend"}:
+        return True
+
+    if api_hostname and hostname == api_hostname:
+        return True
+
+    return False
 
 
 def media_cache_key(photo_ref: str | None) -> str | None:

@@ -1,4 +1,4 @@
-﻿import time
+import time
 from collections import defaultdict, deque
 from threading import Lock
 
@@ -73,7 +73,8 @@ def _user_roles_permissions(user: User):
 
 @router.post("/login")
 def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
-    key = _rate_limit_key(request, data.email)
+    normalized_email = data.email.strip().lower()
+    key = _rate_limit_key(request, normalized_email)
     now = time.monotonic()
 
     with _lock:
@@ -83,7 +84,7 @@ def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
                 detail="Too many login attempts. Try again later.",
             )
 
-    user = db.query(User).filter(User.email == data.email).first()
+    user = db.query(User).filter(User.email.ilike(normalized_email)).first()
 
     if not user or not verify_password(data.password, user.hashed_password):
         with _lock:

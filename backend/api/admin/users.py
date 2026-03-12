@@ -1,4 +1,5 @@
-﻿from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.core.deps import ALL_PERMISSIONS, require_super_admin
@@ -71,11 +72,13 @@ def create_user(
 ):
     _validate_permissions(data.permissions)
 
-    existing = db.query(User).filter(User.email == data.email).first()
+    normalized_email = data.email.strip().lower()
+
+    existing = db.query(User).filter(func.lower(User.email) == normalized_email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already exists")
 
-    user = User(email=data.email, hashed_password=hash_password(data.password), is_active=True)
+    user = User(email=normalized_email, hashed_password=hash_password(data.password), is_active=True)
     db.add(user)
     db.commit()
     db.refresh(user)
