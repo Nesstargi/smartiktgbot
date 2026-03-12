@@ -16,3 +16,4 @@ admin-panel/dist/
 backend/__pycache__/
 bot/__pycache__/
 backend/media/
+pgdata/

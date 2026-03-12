@@ -142,7 +142,8 @@ def _bootstrap_super_admin_role():
         db.close()
 
 
-_ensure_sqlite_migrations()
+if engine.url.get_backend_name() == "sqlite":
+    _ensure_sqlite_migrations()
 _bootstrap_super_admin_role()
 
 app = FastAPI(title="SmartIKTG Backend")

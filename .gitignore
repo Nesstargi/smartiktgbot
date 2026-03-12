@@ -10,6 +10,7 @@ venv/
 # Local database and runtime artifacts
 *.sqlite3
 backend/media/
+pgdata/
 
 # Frontend
 admin-panel/node_modules/

@@ -1,4 +1,15 @@
 ﻿services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: smartiktg-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-smartiktg}
+      POSTGRES_USER: ${POSTGRES_USER:-smartiktg}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smartiktg_pass}
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
   backend:
     build:
       context: .
@@ -6,10 +17,11 @@
     container_name: smartiktg-backend
     env_file:
       - .env
+    depends_on:
+      - postgres
     ports:
       - "8000:8000"
     volumes:
-      - ./db.sqlite3:/app/db.sqlite3
       - ./backend/media:/app/backend/media
     restart: unless-stopped
 
@@ -23,7 +35,6 @@
     depends_on:
       - backend
     volumes:
-      - ./db.sqlite3:/app/db.sqlite3
       - ./backend/media:/app/backend/media
     restart: unless-stopped
 
