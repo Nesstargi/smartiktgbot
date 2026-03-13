@@ -1,13 +1,14 @@
 ﻿from aiogram import F
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from bot.api_client import get_categories, get_products
+from bot.api_client import get_categories
 from bot.handlers.menu import menu
 
 from .catalog_common import (
     categories_cache,
     consultation_waiting_question,
     crumb,
+    get_products_cached,
     lead_contact_keyboard,
     router,
     send_product_card,
@@ -76,7 +77,7 @@ async def lead_start(callback: CallbackQuery):
     cat_id = sub.get("category_id")
     category_name = categories_cache.get(cat_id, f"Категория {cat_id}") if cat_id else "Каталог"
 
-    products = await get_products(sub_id_i)
+    products = await get_products_cached(sub_id_i)
     prod = next((p for p in products if p["id"] == product_id_i), None)
     product_name = prod.get("name") if prod else f"Товар {product_id_i}"
 

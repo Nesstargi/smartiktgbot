@@ -1,4 +1,5 @@
 import asyncio
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -24,6 +25,7 @@ consultation_waiting_question: dict[int, bool] = {}
 subcategories_cache: dict[int, dict] = {}
 categories_cache: dict[int, str] = {}
 media_file_id_cache: dict[str, str] = {}
+products_cache: dict[int, tuple[float, list[dict]]] = {}
 
 DEFAULT_ABANDONED_REMINDER_MESSAGE = (
     "Вы смотрели товары, но не оставили заявку. "
@@ -39,6 +41,31 @@ DEFAULT_CONSULTATION_CONTACT_PROMPT = (
     "Спасибо, вопрос получил. Теперь нажмите кнопку ниже и поделитесь номером телефона:"
 )
 DEFAULT_ABOUT_MESSAGE = "О компании: мы помогаем подобрать решение под ваш запрос."
+PRODUCTS_CACHE_TTL_SECONDS = 90
+
+
+def _products_cache_get(sub_id: int):
+    hit = products_cache.get(sub_id)
+    if not hit:
+        return None
+    expires_at, value = hit
+    if expires_at < time.monotonic():
+        products_cache.pop(sub_id, None)
+        return None
+    return value
+
+
+def _products_cache_set(sub_id: int, value: list[dict], ttl_seconds: int = PRODUCTS_CACHE_TTL_SECONDS):
+    products_cache[sub_id] = (time.monotonic() + ttl_seconds, value)
+
+
+async def get_products_cached(sub_id: int):
+    cached = _products_cache_get(sub_id)
+    if cached is not None:
+        return cached
+    products = await get_products(sub_id)
+    _products_cache_set(sub_id, products)
+    return products
 
 
 def product_text(product: dict) -> str:
@@ -194,6 +221,15 @@ async def photo_payload(photo_ref: str | None):
     return value
 
 
+async def safe_delete_message(message: Message | None):
+    if not message:
+        return
+    try:
+        await message.delete()
+    except Exception:
+        return
+
+
 async def send_subcategories_menu(callback: CallbackQuery, cat_id: int):
     subcategories = await get_subcategories(cat_id)
     for s in subcategories:
@@ -215,14 +251,18 @@ async def send_subcategories_menu(callback: CallbackQuery, cat_id: int):
 
 
 async def send_products_menu(callback: CallbackQuery, sub_id: int):
-    products = await get_products(sub_id)
+    sub = subcategories_cache.get(sub_id, {})
+    sub_image = sub.get("image_url")
+
+    products_task = asyncio.create_task(get_products_cached(sub_id))
+    photo_task = asyncio.create_task(photo_payload(sub_image)) if sub_image else None
+
+    products = await products_task
     if not products:
         await callback.message.answer("❌ В этой подкатегории пока нет товаров")
         return
 
-    sub = subcategories_cache.get(sub_id, {})
     sub_name = sub.get("name", "Подкатегория")
-    sub_image = sub.get("image_url")
     cat_id = sub.get("category_id")
     category_name = categories_cache.get(cat_id, f"Категория {cat_id}") if cat_id else "Каталог"
 
@@ -236,12 +276,9 @@ async def send_products_menu(callback: CallbackQuery, sub_id: int):
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=kb)
     caption = f"📂 *{crumb('Каталог', category_name, sub_name)}*\n\nВыберите товар:"
-    photo = await photo_payload(sub_image)
+    photo = await photo_task if photo_task else None
 
-    try:
-        await callback.message.delete()
-    except Exception:
-        pass
+    asyncio.create_task(safe_delete_message(callback.message))
 
     if photo:
         try:
@@ -260,7 +297,7 @@ async def send_products_menu(callback: CallbackQuery, sub_id: int):
 
 
 async def send_product_card(callback: CallbackQuery, sub_id: int, product_id: int):
-    products = await get_products(sub_id)
+    products = await get_products_cached(sub_id)
     product = next((p for p in products if p["id"] == product_id), None)
     if not product:
         await callback.message.answer("Товар не найден")
@@ -283,10 +320,7 @@ async def send_product_card(callback: CallbackQuery, sub_id: int, product_id: in
     photo = await photo_payload(product.get("image_file_id"))
     text = f"📍 *{crumb('Каталог', category_name, sub_name, product['name'])}*\n\n" + product_text(product)
 
-    try:
-        await callback.message.delete()
-    except Exception:
-        pass
+    asyncio.create_task(safe_delete_message(callback.message))
 
     if photo:
         try:

@@ -81,15 +81,15 @@ async def fetch_bytes(url: str, cache_seconds: int = 60) -> bytes | None:
 
 
 async def get_categories():
-    return await _get("/api/categories", cache_seconds=20)
+    return await _get("/api/categories", cache_seconds=120)
 
 
 async def get_subcategories(cat_id: int):
-    return await _get(f"/api/subcategories/{cat_id}", cache_seconds=20)
+    return await _get(f"/api/subcategories/{cat_id}", cache_seconds=120)
 
 
 async def get_products(sub_id: int):
-    return await _get(f"/api/products/{sub_id}", cache_seconds=15)
+    return await _get(f"/api/products/{sub_id}", cache_seconds=60)
 
 
 async def get_promotions():
