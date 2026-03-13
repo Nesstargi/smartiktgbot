@@ -1,4 +1,5 @@
 import asyncio
+import ipaddress
 import time
 from pathlib import Path
 from urllib.parse import urlparse
@@ -92,6 +93,34 @@ def full_media_url(path_or_url: str | None):
     return f"{API_URL}/{path_or_url.lstrip('/')}"
 
 
+def _looks_like_telegram_file_id(value: str) -> bool:
+    if not value:
+        return False
+    if "/" in value:
+        return False
+    if value.startswith("http://") or value.startswith("https://"):
+        return False
+    if "." in value:
+        return False
+    return len(value) >= 20
+
+
+def _is_private_hostname(hostname: str) -> bool:
+    if not hostname:
+        return True
+    if hostname in {"127.0.0.1", "localhost", "0.0.0.0", "backend"}:
+        return True
+    if hostname.endswith((".local", ".internal", ".lan")):
+        return True
+    if "." not in hostname:
+        return True
+    try:
+        ip_addr = ipaddress.ip_address(hostname)
+        return not ip_addr.is_global
+    except ValueError:
+        return False
+
+
 def is_local_url(url: str) -> bool:
     parsed_url = urlparse(url)
     parsed_api = urlparse(API_URL)
@@ -99,10 +128,10 @@ def is_local_url(url: str) -> bool:
     hostname = (parsed_url.hostname or "").lower()
     api_hostname = (parsed_api.hostname or "").lower()
 
-    if hostname in {"127.0.0.1", "localhost", "0.0.0.0", "backend"}:
+    if _is_private_hostname(hostname):
         return True
 
-    if api_hostname and hostname == api_hostname:
+    if api_hostname and hostname == api_hostname and _is_private_hostname(api_hostname):
         return True
 
     return False
@@ -199,6 +228,9 @@ async def schedule_abandoned_reminder(user_id: int, chat_id: int):
 async def photo_payload(photo_ref: str | None):
     if not photo_ref:
         return None
+
+    if _looks_like_telegram_file_id(photo_ref):
+        return photo_ref
 
     value = full_media_url(photo_ref)
     if not value:
