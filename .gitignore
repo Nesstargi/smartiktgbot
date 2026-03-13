@@ -5,6 +5,7 @@ __pycache__/
 
 # Virtual env
 venv/
+venv311/
 .env
 
 # Local database and runtime artifacts

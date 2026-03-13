@@ -89,7 +89,6 @@ export default function UsersPage() {
     setCreateError("");
     setCreateSuccess("");
     setCreating(true);
-
     try {
       await createAdminUser({
         email: email.trim(),
