@@ -129,20 +129,21 @@ export default function PromotionsPage() {
       </article>
 
       <article className="card">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Фото</th>
-              <th>Название</th>
-              <th>Описание</th>
-              <th>Статус</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <tr key={item.id}>
-                <td>
+        <div className="table-wrap">
+          <table className="table table-compact">
+            <thead>
+              <tr>
+                <th>Фото</th>
+                <th>Название</th>
+                <th>Описание</th>
+                <th>Статус</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id}>
+                <td data-label="Фото">
                   {item.image_url ? (
                     <img
                       src={buildMediaUrl(item.image_url)}
@@ -153,27 +154,28 @@ export default function PromotionsPage() {
                     "-"
                   )}
                 </td>
-                <td>{item.title}</td>
-                <td>{item.description || "-"}</td>
-                <td>{item.is_active ? "Активна" : "Скрыта"}</td>
-                <td className="actions">
+                <td data-label="Название">{item.title}</td>
+                <td data-label="Описание">{item.description || "-"}</td>
+                <td data-label="Статус">{item.is_active ? "Активна" : "Скрыта"}</td>
+                <td className="actions" data-label="Действия">
                   <button onClick={() => onEdit(item)}>Изменить</button>
                   <UploadField
                     compact
                     label="Загрузить фото"
-                    onUploaded={(url) => onUploadImage(item, url)}
-                  />
-                  <button onClick={() => onToggle(item)}>
-                    {item.is_active ? "Скрыть" : "Показать"}
-                  </button>
-                  <button onClick={() => deletePromotion(item.id).then(load)}>
-                    Удалить
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                      onUploaded={(url) => onUploadImage(item, url)}
+                    />
+                    <button onClick={() => onToggle(item)}>
+                      {item.is_active ? "Скрыть" : "Показать"}
+                    </button>
+                    <button onClick={() => deletePromotion(item.id).then(load)}>
+                      Удалить
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </article>
     </section>
   );

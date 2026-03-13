@@ -179,21 +179,23 @@ export default function CatalogPage() {
             <button type="submit">Добавить</button>
           </form>
 
-          <table className="table">
-            <tbody>
-              {categories.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.name}</td>
-                  <td className="actions">
-                    <button onClick={() => onRenameCategory(item)}>Изменить</button>
-                    <button onClick={() => deleteCategory(item.id).then(loadAll)}>
-                      Удалить
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-wrap">
+            <table className="table table-compact">
+              <tbody>
+                {categories.map((item) => (
+                  <tr key={item.id}>
+                    <td data-label="Категория">{item.name}</td>
+                    <td className="actions" data-label="Действия">
+                      <button onClick={() => onRenameCategory(item)}>Изменить</button>
+                      <button onClick={() => deleteCategory(item.id).then(loadAll)}>
+                        Удалить
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </article>
 
         <article className="card">
@@ -234,39 +236,43 @@ export default function CatalogPage() {
             <button type="submit">Добавить</button>
           </form>
 
-          <table className="table">
-            <tbody>
-              {subcategories.map((item) => (
-                <tr key={item.id}>
-                  <td>
-                    {item.image_url ? (
-                      <img
-                        src={buildMediaUrl(item.image_url)}
-                        alt={item.name}
-                        style={{ width: 72, height: 72, objectFit: "cover", border: "1px solid #111" }}
+          <div className="table-wrap">
+            <table className="table table-compact">
+              <tbody>
+                {subcategories.map((item) => (
+                  <tr key={item.id}>
+                    <td data-label="Фото">
+                      {item.image_url ? (
+                        <img
+                          src={buildMediaUrl(item.image_url)}
+                          alt={item.name}
+                          style={{ width: 72, height: 72, objectFit: "cover", border: "1px solid #111" }}
+                        />
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                    <td data-label="Название">{item.name}</td>
+                    <td className="muted" data-label="Категория">
+                      {categoryMap.get(item.category_id) ?? "-"}
+                    </td>
+                    <td className="actions" data-label="Действия">
+                      <button onClick={() => onRenameSubcategory(item)}>Имя</button>
+                      <UploadField
+                        compact
+                        label="Загрузить фото"
+                        onUploaded={(url) => onUploadSubcategoryImage(item, url)}
                       />
-                    ) : (
-                      "-"
-                    )}
-                  </td>
-                  <td>{item.name}</td>
-                  <td className="muted">{categoryMap.get(item.category_id) ?? "-"}</td>
-                  <td className="actions">
-                    <button onClick={() => onRenameSubcategory(item)}>Имя</button>
-                    <UploadField
-                      compact
-                      label="Загрузить фото"
-                      onUploaded={(url) => onUploadSubcategoryImage(item, url)}
-                    />
-                    <button onClick={() => onEditSubcategoryImage(item)}>URL</button>
-                    <button onClick={() => deleteSubcategory(item.id).then(loadAll)}>
-                      Удалить
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                      <button onClick={() => onEditSubcategoryImage(item)}>URL</button>
+                      <button onClick={() => deleteSubcategory(item.id).then(loadAll)}>
+                        Удалить
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </article>
       </div>
 
@@ -340,56 +346,58 @@ export default function CatalogPage() {
           <button type="submit">Добавить товар</button>
         </form>
 
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Фото</th>
-              <th>Название</th>
-              <th>Подкатегория</th>
-              <th>Описание</th>
-              <th>image_file_id</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {filteredProducts.map((item) => {
-              const sub = subcategories.find((s) => s.id === item.subcategory_id);
-              const catName = sub ? categoryMap.get(sub.category_id) : "-";
-              return (
-                <tr key={item.id}>
-                  <td>
-                    {canPreview(item.image_file_id) ? (
-                      <img
-                        src={buildMediaUrl(item.image_file_id)}
-                        alt={item.name}
-                        style={{ width: 72, height: 72, objectFit: "cover", border: "1px solid #111" }}
+        <div className="table-wrap">
+          <table className="table table-compact">
+            <thead>
+              <tr>
+                <th>Фото</th>
+                <th>Название</th>
+                <th>Подкатегория</th>
+                <th>Описание</th>
+                <th>image_file_id</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {filteredProducts.map((item) => {
+                const sub = subcategories.find((s) => s.id === item.subcategory_id);
+                const catName = sub ? categoryMap.get(sub.category_id) : "-";
+                return (
+                  <tr key={item.id}>
+                    <td data-label="Фото">
+                      {canPreview(item.image_file_id) ? (
+                        <img
+                          src={buildMediaUrl(item.image_file_id)}
+                          alt={item.name}
+                          style={{ width: 72, height: 72, objectFit: "cover", border: "1px solid #111" }}
+                        />
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                    <td data-label="Название">{item.name}</td>
+                    <td data-label="Подкатегория">
+                      {catName} / {sub?.name ?? "-"}
+                    </td>
+                    <td data-label="Описание">{item.description || "-"}</td>
+                    <td data-label="image_file_id">{item.image_file_id || "-"}</td>
+                    <td className="actions" data-label="Действия">
+                      <button onClick={() => onEditProduct(item)}>Изменить</button>
+                      <UploadField
+                        compact
+                        label="Загрузить фото"
+                        onUploaded={(url) => onUploadProductImage(item, url)}
                       />
-                    ) : (
-                      "-"
-                    )}
-                  </td>
-                  <td>{item.name}</td>
-                  <td>
-                    {catName} / {sub?.name ?? "-"}
-                  </td>
-                  <td>{item.description || "-"}</td>
-                  <td>{item.image_file_id || "-"}</td>
-                  <td className="actions">
-                    <button onClick={() => onEditProduct(item)}>Изменить</button>
-                    <UploadField
-                      compact
-                      label="Загрузить фото"
-                      onUploaded={(url) => onUploadProductImage(item, url)}
-                    />
-                    <button onClick={() => deleteProduct(item.id).then(loadAll)}>
-                      Удалить
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                      <button onClick={() => deleteProduct(item.id).then(loadAll)}>
+                        Удалить
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </article>
     </section>
   );

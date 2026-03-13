@@ -1,10 +1,12 @@
-﻿import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 
 export default function AdminShell() {
   const { logout, hasPermission, isSuperAdmin } = useAuth();
   const navigate = useNavigate();
+  const [navOpen, setNavOpen] = useState(false);
 
   const links = [
     { to: "/", label: "Дашборд", show: true },
@@ -39,27 +41,48 @@ export default function AdminShell() {
     navigate("/login");
   };
 
+  const handleNavClick = () => {
+    setNavOpen(false);
+  };
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <h1 className="brand">SmartIKT</h1>
-        <nav className="nav-list">
-          {links
-            .filter((link) => link.show)
-            .map((link) => (
-              <NavLink
-                key={link.to}
-                to={link.to}
-                end={link.to === "/"}
-                className={({ isActive }) => `nav-link ${isActive ? "nav-link-active" : ""}`}
-              >
-                {link.label}
-              </NavLink>
-            ))}
-        </nav>
-        <button className="ghost-btn" onClick={handleLogout}>
-          Выйти
-        </button>
+        <div className="sidebar-header">
+          <h1 className="brand">SmartIKT</h1>
+          <button
+            type="button"
+            className="burger-btn"
+            aria-label="Меню"
+            aria-expanded={navOpen}
+            aria-controls="admin-nav"
+            onClick={() => setNavOpen((prev) => !prev)}
+          >
+            <span className="burger-lines" aria-hidden="true" />
+          </button>
+        </div>
+        <div className={`sidebar-body ${navOpen ? "sidebar-body-open" : ""}`}>
+          <nav id="admin-nav" className="nav-list">
+            {links
+              .filter((link) => link.show)
+              .map((link) => (
+                <NavLink
+                  key={link.to}
+                  to={link.to}
+                  end={link.to === "/"}
+                  onClick={handleNavClick}
+                  className={({ isActive }) =>
+                    `nav-link ${isActive ? "nav-link-active" : ""}`
+                  }
+                >
+                  {link.label}
+                </NavLink>
+              ))}
+          </nav>
+          <button className="ghost-btn" onClick={handleLogout}>
+            Выйти
+          </button>
+        </div>
       </aside>
 
       <main className="main-content">

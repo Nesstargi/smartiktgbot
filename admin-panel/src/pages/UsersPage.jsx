@@ -225,68 +225,70 @@ export default function UsersPage() {
         {loading ? (
           <p className="muted">Загрузка...</p>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Email</th>
-                <th>Роли</th>
-                <th>Права</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((user) => {
-                const isEditing = editingUserId === user.id;
-                const isSaving = savingPermissionsFor === user.id;
+          <div className="table-wrap">
+            <table className="table table-compact">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Email</th>
+                  <th>Роли</th>
+                  <th>Права</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((user) => {
+                  const isEditing = editingUserId === user.id;
+                  const isSaving = savingPermissionsFor === user.id;
 
-                return (
-                  <tr key={user.id}>
-                    <td>{user.id}</td>
-                    <td>{user.email}</td>
-                    <td>{(user.roles || []).join(", ") || "-"}</td>
-                    <td>
-                      {isEditing ? (
-                        <div className="permissions-grid permissions-grid-inline">
-                          {availablePermissions.map((perm) => (
-                            <label key={perm} className="checkbox" title={perm}>
-                              <input
-                                type="checkbox"
-                                checked={editingPermissions.includes(perm)}
-                                onChange={() => onToggleEditingPermission(perm)}
-                              />
-                              {formatPermission(perm)}
-                            </label>
-                          ))}
-                        </div>
-                      ) : (
-                        (user.permissions || []).map(formatPermission).join(", ") || "-"
-                      )}
-                    </td>
-                    <td className="actions">
-                      {isEditing ? (
-                        <>
-                          <button onClick={() => onSavePermissions(user)} disabled={isSaving}>
-                            {isSaving ? "Сохранение..." : "Сохранить"}
-                          </button>
-                          <button onClick={onCancelEditPermissions} disabled={isSaving}>
-                            Отмена
-                          </button>
-                        </>
-                      ) : (
-                        <button onClick={() => onStartEditPermissions(user)}>Права</button>
-                      )}
+                  return (
+                    <tr key={user.id}>
+                      <td data-label="ID">{user.id}</td>
+                      <td data-label="Email">{user.email}</td>
+                      <td data-label="Роли">{(user.roles || []).join(", ") || "-"}</td>
+                      <td data-label="Права">
+                        {isEditing ? (
+                          <div className="permissions-grid permissions-grid-inline">
+                            {availablePermissions.map((perm) => (
+                              <label key={perm} className="checkbox" title={perm}>
+                                <input
+                                  type="checkbox"
+                                  checked={editingPermissions.includes(perm)}
+                                  onChange={() => onToggleEditingPermission(perm)}
+                                />
+                                {formatPermission(perm)}
+                              </label>
+                            ))}
+                          </div>
+                        ) : (
+                          (user.permissions || []).map(formatPermission).join(", ") || "-"
+                        )}
+                      </td>
+                      <td className="actions" data-label="Действия">
+                        {isEditing ? (
+                          <>
+                            <button onClick={() => onSavePermissions(user)} disabled={isSaving}>
+                              {isSaving ? "Сохранение..." : "Сохранить"}
+                            </button>
+                            <button onClick={onCancelEditPermissions} disabled={isSaving}>
+                              Отмена
+                            </button>
+                          </>
+                        ) : (
+                          <button onClick={() => onStartEditPermissions(user)}>Права</button>
+                        )}
 
-                      <button onClick={() => onToggleSuperAdmin(user)}>
-                        {(user.roles || []).includes("super_admin") ? "Снять super" : "Сделать super"}
-                      </button>
-                      <button onClick={() => onDelete(user)}>Удалить</button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                        <button onClick={() => onToggleSuperAdmin(user)}>
+                          {(user.roles || []).includes("super_admin") ? "Снять super" : "Сделать super"}
+                        </button>
+                        <button onClick={() => onDelete(user)}>Удалить</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </article>
     </section>

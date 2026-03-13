@@ -48,34 +48,36 @@ export default function LeadsPage() {
         {loading ? (
           <p className="muted">Загрузка...</p>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Дата и время</th>
-                <th>Имя</th>
-                <th>Телефон</th>
-                <th>Telegram ID</th>
-                <th>Заявка</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.id}</td>
-                  <td>{formatDateTime(item.created_at)}</td>
-                  <td>{item.name || "-"}</td>
-                  <td>{item.phone || "-"}</td>
-                  <td>{item.telegram_id || "-"}</td>
-                  <td>{item.product || "-"}</td>
-                  <td className="actions">
-                    <button onClick={() => onDelete(item)}>Удалить</button>
-                  </td>
+          <div className="table-wrap">
+            <table className="table table-compact">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Дата и время</th>
+                  <th>Имя</th>
+                  <th>Телефон</th>
+                  <th>Telegram ID</th>
+                  <th>Заявка</th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr key={item.id}>
+                    <td data-label="ID">{item.id}</td>
+                    <td data-label="Дата и время">{formatDateTime(item.created_at)}</td>
+                    <td data-label="Имя">{item.name || "-"}</td>
+                    <td data-label="Телефон">{item.phone || "-"}</td>
+                    <td data-label="Telegram ID">{item.telegram_id || "-"}</td>
+                    <td data-label="Заявка">{item.product || "-"}</td>
+                    <td className="actions" data-label="Действия">
+                      <button onClick={() => onDelete(item)}>Удалить</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </article>
     </section>
