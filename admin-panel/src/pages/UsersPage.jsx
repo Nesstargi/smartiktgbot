@@ -60,6 +60,10 @@ export default function UsersPage() {
   const [savingPermissionsFor, setSavingPermissionsFor] = useState(null);
 
   const canSubmit = useMemo(() => email.trim() && password.trim().length >= 8, [email, password]);
+  const passwordInvalid = useMemo(
+    () => password.trim().length > 0 && password.trim().length < 8,
+    [password],
+  );
 
   const load = async () => {
     setLoading(true);
@@ -84,7 +88,14 @@ export default function UsersPage() {
 
   const onCreate = async (e) => {
     e.preventDefault();
-    if (!canSubmit) return;
+    if (!email.trim()) {
+      setCreateError("Введите email");
+      return;
+    }
+    if (password.trim().length < 8) {
+      setCreateError("Пароль должен быть не короче 8 символов");
+      return;
+    }
 
     setCreateError("");
     setCreateSuccess("");
@@ -171,6 +182,12 @@ export default function UsersPage() {
             onChange={(e) => setPassword(e.target.value)}
             minLength={8}
             required
+            aria-invalid={passwordInvalid}
+            style={
+              passwordInvalid
+                ? { borderColor: "#e11d48", outlineColor: "#e11d48" }
+                : undefined
+            }
           />
 
           <label className="checkbox">
