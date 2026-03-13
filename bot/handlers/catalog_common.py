@@ -8,6 +8,7 @@ from aiogram import Router
 from aiogram.types import (
     BufferedInputFile,
     CallbackQuery,
+    FSInputFile,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     KeyboardButton,
@@ -43,6 +44,7 @@ DEFAULT_CONSULTATION_CONTACT_PROMPT = (
 )
 DEFAULT_ABOUT_MESSAGE = "О компании: мы помогаем подобрать решение под ваш запрос."
 PRODUCTS_CACHE_TTL_SECONDS = 90
+MEDIA_ROOT = Path("backend/media")
 
 
 def _products_cache_get(sub_id: int):
@@ -91,6 +93,40 @@ def full_media_url(path_or_url: str | None):
         return f"{API_URL}/media/{path_or_url}"
 
     return f"{API_URL}/{path_or_url.lstrip('/')}"
+
+
+def _resolve_local_media_path(photo_ref: str | None) -> Path | None:
+    if not photo_ref:
+        return None
+
+    value = str(photo_ref).strip()
+    if not value:
+        return None
+
+    if _looks_like_telegram_file_id(value):
+        return None
+
+    if value.startswith("http://") or value.startswith("https://"):
+        parsed = urlparse(value)
+        if parsed.path.startswith("/media/"):
+            candidate = MEDIA_ROOT / parsed.path.removeprefix("/media/")
+            if candidate.exists() and candidate.is_file():
+                return candidate
+        return None
+
+    if value.startswith("/media/"):
+        candidate = MEDIA_ROOT / value.removeprefix("/media/")
+    elif value.startswith("media/"):
+        candidate = MEDIA_ROOT / value.removeprefix("media/")
+    elif "/" not in value and "." in value:
+        candidate = MEDIA_ROOT / value
+    else:
+        candidate = Path(value)
+
+    if candidate.exists() and candidate.is_file():
+        return candidate
+
+    return None
 
 
 def _looks_like_telegram_file_id(value: str) -> bool:
@@ -232,6 +268,10 @@ async def photo_payload(photo_ref: str | None):
     if _looks_like_telegram_file_id(photo_ref):
         return photo_ref
 
+    local_path = _resolve_local_media_path(photo_ref)
+    if local_path:
+        return FSInputFile(local_path)
+
     value = full_media_url(photo_ref)
     if not value:
         return None
@@ -245,7 +285,10 @@ async def photo_payload(photo_ref: str | None):
             return value
 
         filename = Path(value.split("?", 1)[0]).name or "image.jpg"
-        content = await fetch_bytes(value, cache_seconds=90)
+        try:
+            content = await fetch_bytes(value, cache_seconds=90)
+        except Exception:
+            return None
         if not content:
             return None
         return BufferedInputFile(content, filename=filename)

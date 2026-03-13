@@ -1,4 +1,6 @@
-﻿from aiogram import F
+﻿import asyncio
+
+from aiogram import F
 from aiogram.types import Message
 
 from bot.api_client import get_promotions
@@ -20,16 +22,31 @@ async def show_promotions(message: Message):
         return
 
     await message.answer("🔥 *Акции*", parse_mode="Markdown")
+
+    photo_tasks: list[asyncio.Task | None] = []
     for item in promotions:
+        image_url = item.get("image_url")
+        photo_tasks.append(asyncio.create_task(photo_payload(image_url)) if image_url else None)
+
+    for item, task in zip(promotions, photo_tasks):
         title = item.get("title", "Без названия")
         desc = item.get("description") or ""
         text = f"*{title}*\n{desc}".strip()
 
-        photo = await photo_payload(item.get("image_url"))
+        try:
+            photo = await task if task else None
+        except Exception:
+            photo = None
         if photo:
             try:
-                sent = await message.answer_photo(photo=photo, caption=text, parse_mode="Markdown")
+                if len(text) <= 1024:
+                    sent = await message.answer_photo(photo=photo, caption=text, parse_mode="Markdown")
+                    remember_sent_photo(item.get("image_url"), sent)
+                    continue
+
+                sent = await message.answer_photo(photo=photo)
                 remember_sent_photo(item.get("image_url"), sent)
+                await message.answer(text, parse_mode="Markdown")
                 continue
             except Exception:
                 pass
