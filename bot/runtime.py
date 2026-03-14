@@ -11,7 +11,11 @@ from dotenv import load_dotenv
 
 from bot.api_client import close_http_session
 from bot.handlers.catalog import router as catalog_router
-from bot.handlers.catalog_common import restore_pending_reminders, schedule_catalog_warmup
+from bot.handlers.catalog_common import (
+    restore_pending_reminders,
+    schedule_catalog_warmup,
+    shutdown_background_tasks,
+)
 from bot.handlers.menu import router as menu_router
 from bot.runtime_store import runtime_store
 
@@ -78,7 +82,7 @@ def get_bot_instance() -> Bot | None:
     global _bot
     if not has_bot_token():
         return None
-    if _bot is None or _bot.session.closed:
+    if _bot is None:
         _bot = Bot(token=TOKEN)
     return _bot
 
@@ -108,11 +112,15 @@ async def startup_bot_runtime() -> tuple[Bot | None, Dispatcher]:
 async def shutdown_bot_runtime():
     global _bot, _runtime_started
 
+    await shutdown_background_tasks()
     await close_http_session()
     await runtime_store.close()
 
-    if _bot is not None and not _bot.session.closed:
-        await _bot.session.close()
+    if _bot is not None:
+        try:
+            await _bot.session.close()
+        except Exception:
+            logger.debug("Bot session close failed", exc_info=True)
     _bot = None
 
     _runtime_started = False

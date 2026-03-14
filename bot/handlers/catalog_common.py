@@ -286,6 +286,27 @@ def schedule_catalog_warmup(force_refresh: bool = False):
     return catalog_warmup_task
 
 
+async def shutdown_background_tasks():
+    global catalog_warmup_task
+
+    tasks: list[asyncio.Task] = []
+
+    warmup_task = catalog_warmup_task
+    catalog_warmup_task = None
+    if warmup_task is not None and not warmup_task.done():
+        warmup_task.cancel()
+        tasks.append(warmup_task)
+
+    for user_id, task in list(reminder_tasks.items()):
+        reminder_tasks.pop(user_id, None)
+        if task is not None and not task.done():
+            task.cancel()
+            tasks.append(task)
+
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
 async def get_products_cached(sub_id: int):
     cached = _products_cache_get(sub_id)
     if cached is not None:
