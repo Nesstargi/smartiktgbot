@@ -1,8 +1,8 @@
-﻿import api from "./axios";
+import api, { toListResult } from "./axios";
 
-export const getProducts = async () => {
-  const res = await api.get("/admin/products/");
-  return res.data;
+export const getProducts = async (params = {}) => {
+  const res = await api.get("/admin/products/", { params });
+  return toListResult(res);
 };
 
 export const createProduct = async (data) => {

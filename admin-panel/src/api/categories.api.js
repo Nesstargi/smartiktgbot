@@ -1,8 +1,8 @@
-﻿import api from "./axios";
+import api, { toListResult } from "./axios";
 
-export const getCategories = async () => {
-  const res = await api.get("/admin/categories/");
-  return res.data;
+export const getCategories = async (params = {}) => {
+  const res = await api.get("/admin/categories/", { params });
+  return toListResult(res);
 };
 
 export const createCategory = async (data) => {

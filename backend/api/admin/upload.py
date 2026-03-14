@@ -35,7 +35,11 @@ async def upload_file(
             detail="Allowed image formats: png, jpg, jpeg, webp, jfif",
         )
 
-    saved_filename = await MediaService.save_file(file)
+    try:
+        saved_filename = await MediaService.save_file(file)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     return {
         "status": "ok",
         "filename": saved_filename,

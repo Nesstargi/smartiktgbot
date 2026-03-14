@@ -6,7 +6,7 @@ from aiogram.types import Message
 from bot.api_client import get_promotions, update_promotion_file_id
 
 from .catalog_common import (
-    consultation_waiting_question,
+    clear_consultation_waiting,
     photo_payload,
     remember_sent_photo,
     router,
@@ -16,7 +16,8 @@ from .catalog_common import (
 
 @router.message(F.text == "🔥 Акции")
 async def show_promotions(message: Message):
-    consultation_waiting_question.pop(message.from_user.id if message.from_user else 0, None)
+    if message.from_user:
+        await clear_consultation_waiting(message.from_user.id)
     promotions = await get_promotions()
     if not promotions:
         await message.answer("Сейчас активных акций нет.")
@@ -53,7 +54,7 @@ async def show_promotions(message: Message):
                     if sent:
                         image_url = item.get("image_url")
                         if image_url:
-                            remember_sent_photo(image_url, sent)
+                            await remember_sent_photo(image_url, sent)
                         if not item.get("image_file_id"):
                             photo_sizes = getattr(sent, "photo", None)
                             if photo_sizes:
@@ -72,7 +73,7 @@ async def show_promotions(message: Message):
                 if sent:
                     image_url = item.get("image_url")
                     if image_url:
-                        remember_sent_photo(image_url, sent)
+                        await remember_sent_photo(image_url, sent)
                     if not item.get("image_file_id"):
                         photo_sizes = getattr(sent, "photo", None)
                         if photo_sizes:

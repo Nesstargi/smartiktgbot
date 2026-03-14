@@ -1,37 +1,48 @@
 import { useEffect, useState } from "react";
-import { getProducts, createProduct, deleteProduct } from "../api/products.api";
+
 import { getCategories } from "../api/categories.api";
-import ProductTable from "../components/ProductTable";
+import { createProduct, deleteProduct, getProducts } from "../api/products.api";
 import ProductForm from "../components/ProductForm";
+import ProductTable from "../components/ProductTable";
 
 export default function ProductsPage() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [showForm, setShowForm] = useState(false);
 
-  const loadAll = async () => {
-    const [p, c] = await Promise.all([
-      getProducts(),
-      getCategories(),
-    ]);
-    setProducts(p);
-    setCategories(c);
-  };
-
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch updates local state
+    let cancelled = false;
+
+    async function loadAll() {
+      const [productsResult, categoriesResult] = await Promise.all([
+        getProducts(),
+        getCategories(),
+      ]);
+
+      if (!cancelled) {
+        setProducts(productsResult.items || []);
+        setCategories(categoriesResult.items || []);
+      }
+    }
+
     loadAll();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleCreate = async (data) => {
     await createProduct(data);
     setShowForm(false);
-    loadAll();
+
+    const productsResult = await getProducts();
+    setProducts(productsResult.items || []);
   };
 
   const handleDelete = async (id) => {
     await deleteProduct(id);
-    loadAll();
+    const productsResult = await getProducts();
+    setProducts(productsResult.items || []);
   };
 
   return (

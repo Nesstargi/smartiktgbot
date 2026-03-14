@@ -1,8 +1,8 @@
-﻿import api from "./axios";
+import api, { toListResult } from "./axios";
 
-export const getLeads = async () => {
-  const res = await api.get("/admin/leads/");
-  return res.data;
+export const getLeads = async (params = {}) => {
+  const res = await api.get("/admin/leads/", { params });
+  return toListResult(res);
 };
 
 export const deleteLead = async (id) => {

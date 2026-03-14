@@ -21,6 +21,10 @@ export default function ProductTable({ products, onDelete }) {
                   <img
                     src={p.image}
                     alt=""
+                    loading="lazy"
+                    decoding="async"
+                    width={60}
+                    height={60}
                     style={{ width: 60, height: 60, objectFit: "cover" }}
                   />
                 )}

@@ -1,8 +1,8 @@
-﻿import api from "./axios";
+import api, { toListResult } from "./axios";
 
-export const getPromotions = async () => {
-  const res = await api.get("/admin/promotions/");
-  return res.data;
+export const getPromotions = async (params = {}) => {
+  const res = await api.get("/admin/promotions/", { params });
+  return toListResult(res);
 };
 
 export const createPromotion = async (data) => {

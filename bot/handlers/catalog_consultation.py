@@ -1,4 +1,5 @@
-﻿import logging
+import asyncio
+import logging
 import os
 
 from aiogram import F
@@ -13,11 +14,16 @@ from .catalog_common import (
     DEFAULT_CONSULTATION_MESSAGE,
     DEFAULT_CONSULTATION_PHONE,
     cancel_reminder_task,
-    consultation_waiting_question,
+    clear_consultation_waiting,
+    clear_reminder_reply_context,
+    get_reminder_reply_context,
+    is_consultation_waiting,
     lead_contact_keyboard,
-    lead_requests,
-    reminder_reply_waiting,
+    pop_lead_request,
+    pop_reminder_reply_context,
     router,
+    set_consultation_waiting,
+    set_lead_request,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,11 +56,14 @@ async def accept_reminder_response(message: Message, context: dict):
     if not user:
         return
 
-    lead_requests[user.id] = {
-        **context,
-        "user_message": message.text,
-    }
-    reminder_reply_waiting.pop(user.id, None)
+    await set_lead_request(
+        user.id,
+        {
+            **context,
+            "user_message": message.text,
+        },
+    )
+    await clear_reminder_reply_context(user.id)
 
     await message.answer(
         "Спасибо за ответ. Теперь нажмите кнопку и поделитесь номером телефона:",
@@ -100,8 +109,10 @@ async def start_consultation(message: Message):
         return
 
     user_id = message.from_user.id
-    reminder_reply_waiting.pop(user_id, None)
-    consultation_waiting_question[user_id] = True
+    await asyncio.gather(
+        clear_reminder_reply_context(user_id),
+        set_consultation_waiting(user_id),
+    )
 
     try:
         settings = await get_bot_settings()
@@ -122,7 +133,7 @@ async def start_consultation(message: Message):
 @router.message(F.text == "ℹ️ О компании")
 async def show_about(message: Message):
     if message.from_user:
-        consultation_waiting_question.pop(message.from_user.id, None)
+        await clear_consultation_waiting(message.from_user.id)
 
     try:
         settings = await get_bot_settings()
@@ -139,7 +150,7 @@ async def reminder_reply(message: Message):
     if not user:
         return
 
-    context = reminder_reply_waiting.get(user.id)
+    context = await get_reminder_reply_context(user.id)
     if not context:
         return
 
@@ -156,10 +167,12 @@ async def cancel_lead(message: Message):
         return
 
     user_id = message.from_user.id
-    context = lead_requests.pop(user_id, None)
-    reminder_reply_waiting.pop(user_id, None)
-    consultation_waiting_question.pop(user_id, None)
-    cancel_reminder_task(user_id)
+    context = await pop_lead_request(user_id)
+    await asyncio.gather(
+        pop_reminder_reply_context(user_id),
+        clear_consultation_waiting(user_id),
+        cancel_reminder_task(user_id),
+    )
 
     inline = None
     if context:
@@ -179,7 +192,7 @@ async def cancel_lead(message: Message):
 @router.message(F.text == "🏠 Главное меню")
 async def back_to_main_from_keyboard(message: Message):
     if message.from_user:
-        consultation_waiting_question.pop(message.from_user.id, None)
+        await clear_consultation_waiting(message.from_user.id)
     await message.answer("🏠 Главное меню\n\nВыберите пункт меню 👇", reply_markup=menu)
 
 
@@ -192,16 +205,20 @@ async def reminder_reply_fallback(message: Message):
     if is_menu_text(message.text):
         return
 
-    if consultation_waiting_question.get(user.id):
-        consultation_waiting_question.pop(user.id, None)
-        reminder_reply_waiting.pop(user.id, None)
+    if await is_consultation_waiting(user.id):
+        await asyncio.gather(
+            clear_consultation_waiting(user.id),
+            clear_reminder_reply_context(user.id),
+        )
 
-        lead_requests[user.id] = {
-            "bot": message.bot,
-            "chat_id": message.chat.id,
-            "flow": "consultation",
-            "user_message": message.text,
-        }
+        await set_lead_request(
+            user.id,
+            {
+                "chat_id": message.chat.id,
+                "flow": "consultation",
+                "user_message": message.text,
+            },
+        )
 
         try:
             settings = await get_bot_settings()
@@ -212,7 +229,7 @@ async def reminder_reply_fallback(message: Message):
         await message.answer(contact_prompt, reply_markup=lead_contact_keyboard())
         return
 
-    context = reminder_reply_waiting.get(user.id)
+    context = await get_reminder_reply_context(user.id)
     if not context:
         return
 
@@ -227,10 +244,12 @@ async def handle_contact(message: Message):
     phone = message.contact.phone_number
     user_id = message.from_user.id
     name = message.from_user.full_name
-    context = lead_requests.pop(user_id, None) or {}
-    reminder_reply_waiting.pop(user_id, None)
-    consultation_waiting_question.pop(user_id, None)
-    cancel_reminder_task(user_id)
+    context = await pop_lead_request(user_id) or {}
+    await asyncio.gather(
+        pop_reminder_reply_context(user_id),
+        clear_consultation_waiting(user_id),
+        cancel_reminder_task(user_id),
+    )
 
     flow = context.get("flow")
     product_id = context.get("product_id")

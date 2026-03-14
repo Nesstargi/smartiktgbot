@@ -1,6 +1,10 @@
 import asyncio
 import ipaddress
+import json
+import logging
+import os
 import time
+from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -15,10 +19,20 @@ from aiogram.types import (
     Message,
     ReplyKeyboardMarkup,
 )
+from PIL import Image, ImageOps, UnidentifiedImageError
 
-from bot.api_client import API_URL, fetch_bytes, get_bot_settings, get_products, get_subcategories
+from bot.api_client import (
+    API_URL,
+    fetch_bytes,
+    get_bot_settings,
+    get_categories,
+    get_products,
+    get_subcategories,
+)
+from bot.runtime_store import runtime_store
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 lead_requests: dict[int, dict] = {}
 reminder_tasks: dict[int, asyncio.Task] = {}
@@ -26,8 +40,12 @@ reminder_reply_waiting: dict[int, dict] = {}
 consultation_waiting_question: dict[int, bool] = {}
 subcategories_cache: dict[int, dict] = {}
 categories_cache: dict[int, str] = {}
-media_file_id_cache: dict[str, str] = {}
+category_lists_cache: dict[str, tuple[float, list[dict]]] = {}
+subcategory_lists_cache: dict[int, tuple[float, list[dict]]] = {}
 products_cache: dict[int, tuple[float, list[dict]]] = {}
+catalog_warmup_task: asyncio.Task | None = None
+catalog_warmup_lock = asyncio.Lock()
+catalog_warmup_expires_at = 0.0
 
 DEFAULT_ABANDONED_REMINDER_MESSAGE = (
     "Вы смотрели товары, но не оставили заявку. "
@@ -43,8 +61,115 @@ DEFAULT_CONSULTATION_CONTACT_PROMPT = (
     "Спасибо, вопрос получил. Теперь нажмите кнопку ниже и поделитесь номером телефона:"
 )
 DEFAULT_ABOUT_MESSAGE = "О компании: мы помогаем подобрать решение под ваш запрос."
+CATALOG_CACHE_TTL_SECONDS = 300
 PRODUCTS_CACHE_TTL_SECONDS = 90
-MEDIA_ROOT = Path("backend/media")
+LEAD_STATE_TTL_SECONDS = int(os.getenv("BOT_STATE_TTL_SECONDS", "86400"))
+REMINDER_STATE_TTL_SECONDS = int(os.getenv("BOT_REMINDER_STATE_TTL_SECONDS", "172800"))
+MEDIA_FILE_ID_TTL_SECONDS = int(os.getenv("BOT_MEDIA_FILE_ID_TTL_SECONDS", "2592000"))
+CATALOG_WARMUP_TTL_SECONDS = int(os.getenv("BOT_CATALOG_WARMUP_TTL_SECONDS", "300"))
+MEDIA_ROOT = Path(__file__).resolve().parents[2] / "backend" / "media"
+MEDIA_CACHE_PATH = Path(__file__).resolve().parents[1] / "cache" / "media_file_ids.json"
+TELEGRAM_IMAGE_MAX_SIZE = 1600
+TELEGRAM_JPEG_QUALITY = 85
+
+
+def _load_media_file_id_cache() -> dict[str, str]:
+    if not MEDIA_CACHE_PATH.exists():
+        return {}
+
+    try:
+        data = json.loads(MEDIA_CACHE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+    if not isinstance(data, dict):
+        return {}
+
+    cache: dict[str, str] = {}
+    for key, value in data.items():
+        if not key or not value:
+            continue
+        cache[str(key)] = str(value)
+    return cache
+
+
+def _persist_media_file_id_cache():
+    MEDIA_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = MEDIA_CACHE_PATH.with_suffix(".tmp")
+    temp_path.write_text(
+        json.dumps(media_file_id_cache, ensure_ascii=False, sort_keys=True),
+        encoding="utf-8",
+    )
+    temp_path.replace(MEDIA_CACHE_PATH)
+
+
+media_file_id_cache: dict[str, str] = _load_media_file_id_cache()
+
+
+def _lead_request_key(user_id: int) -> str:
+    return f"bot:state:lead_request:{user_id}"
+
+
+def _reminder_reply_key(user_id: int) -> str:
+    return f"bot:state:reminder_reply:{user_id}"
+
+
+def _consultation_waiting_key(user_id: int) -> str:
+    return f"bot:state:consultation_waiting:{user_id}"
+
+
+def _reminder_schedule_key(user_id: int) -> str:
+    return f"bot:state:reminder_schedule:{user_id}"
+
+
+def _products_cache_key(sub_id: int) -> str:
+    return f"bot:cache:products:{sub_id}"
+
+
+def _categories_cache_key() -> str:
+    return "bot:cache:categories"
+
+
+def _subcategories_cache_key(cat_id: int) -> str:
+    return f"bot:cache:subcategories:{cat_id}"
+
+
+def _media_file_id_store_key(cache_key: str) -> str:
+    return f"bot:cache:media_file_id:{cache_key}"
+
+
+def _category_lists_cache_get():
+    hit = category_lists_cache.get("all")
+    if not hit:
+        return None
+    expires_at, value = hit
+    if expires_at < time.monotonic():
+        category_lists_cache.pop("all", None)
+        return None
+    return value
+
+
+def _category_lists_cache_set(value: list[dict], ttl_seconds: int = CATALOG_CACHE_TTL_SECONDS):
+    category_lists_cache["all"] = (time.monotonic() + ttl_seconds, value)
+
+
+def _subcategory_lists_cache_get(cat_id: int):
+    hit = subcategory_lists_cache.get(cat_id)
+    if not hit:
+        return None
+    expires_at, value = hit
+    if expires_at < time.monotonic():
+        subcategory_lists_cache.pop(cat_id, None)
+        return None
+    return value
+
+
+def _subcategory_lists_cache_set(
+    cat_id: int,
+    value: list[dict],
+    ttl_seconds: int = CATALOG_CACHE_TTL_SECONDS,
+):
+    subcategory_lists_cache[cat_id] = (time.monotonic() + ttl_seconds, value)
 
 
 def _products_cache_get(sub_id: int):
@@ -62,12 +187,116 @@ def _products_cache_set(sub_id: int, value: list[dict], ttl_seconds: int = PRODU
     products_cache[sub_id] = (time.monotonic() + ttl_seconds, value)
 
 
+def _populate_categories_cache(items: list[dict]):
+    categories_cache.clear()
+    for item in items:
+        item_id = item.get("id")
+        item_name = item.get("name")
+        if item_id is None or not item_name:
+            continue
+        categories_cache[int(item_id)] = str(item_name)
+
+
+def _populate_subcategories_cache(items: list[dict]):
+    for item in items:
+        item_id = item.get("id")
+        if item_id is None:
+            continue
+        subcategories_cache[int(item_id)] = item
+
+
+async def get_categories_cached(force_refresh: bool = False):
+    if not force_refresh:
+        cached = _category_lists_cache_get()
+        if cached is not None:
+            return cached
+
+        cached = await runtime_store.get_json(_categories_cache_key())
+        if isinstance(cached, list):
+            _category_lists_cache_set(cached)
+            _populate_categories_cache(cached)
+            return cached
+
+    categories = await get_categories()
+    _category_lists_cache_set(categories)
+    _populate_categories_cache(categories)
+    await runtime_store.set_json(_categories_cache_key(), categories, CATALOG_CACHE_TTL_SECONDS)
+    return categories
+
+
+async def get_subcategories_cached(cat_id: int, force_refresh: bool = False):
+    if not force_refresh:
+        cached = _subcategory_lists_cache_get(cat_id)
+        if cached is not None:
+            return cached
+
+        cached = await runtime_store.get_json(_subcategories_cache_key(cat_id))
+        if isinstance(cached, list):
+            _subcategory_lists_cache_set(cat_id, cached)
+            _populate_subcategories_cache(cached)
+            return cached
+
+    subcategories = await get_subcategories(cat_id)
+    _subcategory_lists_cache_set(cat_id, subcategories)
+    _populate_subcategories_cache(subcategories)
+    await runtime_store.set_json(
+        _subcategories_cache_key(cat_id),
+        subcategories,
+        CATALOG_CACHE_TTL_SECONDS,
+    )
+    return subcategories
+
+
+async def warm_catalog_cache(force_refresh: bool = False):
+    global catalog_warmup_expires_at
+
+    async with catalog_warmup_lock:
+        if not force_refresh and catalog_warmup_expires_at > time.monotonic():
+            return
+
+        try:
+            categories = await get_categories_cached(force_refresh=force_refresh)
+            if categories:
+                results = await asyncio.gather(
+                    *(get_subcategories_cached(cat["id"], force_refresh=force_refresh) for cat in categories),
+                    return_exceptions=True,
+                )
+                for result in results:
+                    if isinstance(result, Exception):
+                        logger.debug("Catalog warmup subcategory fetch failed: %s", result)
+            catalog_warmup_expires_at = time.monotonic() + CATALOG_WARMUP_TTL_SECONDS
+        except Exception:
+            logger.debug("Catalog warmup failed", exc_info=True)
+
+
+def schedule_catalog_warmup(force_refresh: bool = False):
+    global catalog_warmup_task
+
+    if catalog_warmup_task and not catalog_warmup_task.done():
+        return catalog_warmup_task
+
+    async def _runner():
+        global catalog_warmup_task
+        try:
+            await warm_catalog_cache(force_refresh=force_refresh)
+        finally:
+            catalog_warmup_task = None
+
+    catalog_warmup_task = asyncio.create_task(_runner())
+    return catalog_warmup_task
+
+
 async def get_products_cached(sub_id: int):
     cached = _products_cache_get(sub_id)
     if cached is not None:
         return cached
+    cached = await runtime_store.get_json(_products_cache_key(sub_id))
+    if isinstance(cached, list):
+        _products_cache_set(sub_id, cached)
+        return cached
     products = await get_products(sub_id)
     _products_cache_set(sub_id, products)
+    await runtime_store.set_json(_products_cache_key(sub_id), products, PRODUCTS_CACHE_TTL_SECONDS)
     return products
 
 
@@ -83,6 +312,8 @@ def crumb(*parts: str) -> str:
 def full_media_url(path_or_url: str | None):
     if not path_or_url:
         return None
+    if _looks_like_telegram_file_id(path_or_url):
+        return path_or_url
     if path_or_url.startswith("http://") or path_or_url.startswith("https://"):
         return path_or_url
     if path_or_url.startswith("/"):
@@ -174,13 +405,155 @@ def is_local_url(url: str) -> bool:
 
 
 def media_cache_key(photo_ref: str | None) -> str | None:
-    value = full_media_url(photo_ref)
-    if not value:
+    return full_media_url(photo_ref)
+
+
+async def get_lead_request(user_id: int) -> dict | None:
+    context = lead_requests.get(user_id)
+    if context is not None:
+        return context.copy()
+
+    context = await runtime_store.get_json(_lead_request_key(user_id))
+    if not isinstance(context, dict):
         return None
-    return value
+
+    lead_requests[user_id] = context
+    return context.copy()
 
 
-def remember_sent_photo(photo_ref: str | None, sent_message: Message):
+async def set_lead_request(user_id: int, context: dict):
+    clean_context = {**context}
+    lead_requests[user_id] = clean_context
+    await runtime_store.set_json(
+        _lead_request_key(user_id),
+        clean_context,
+        LEAD_STATE_TTL_SECONDS,
+    )
+
+
+async def pop_lead_request(user_id: int) -> dict | None:
+    context = lead_requests.pop(user_id, None)
+    if context is not None:
+        await runtime_store.delete(_lead_request_key(user_id))
+        return context
+
+    return await runtime_store.pop_json(_lead_request_key(user_id))
+
+
+async def get_reminder_reply_context(user_id: int) -> dict | None:
+    context = reminder_reply_waiting.get(user_id)
+    if context is not None:
+        return context.copy()
+
+    context = await runtime_store.get_json(_reminder_reply_key(user_id))
+    if not isinstance(context, dict):
+        return None
+
+    reminder_reply_waiting[user_id] = context
+    return context.copy()
+
+
+async def set_reminder_reply_context(user_id: int, context: dict):
+    clean_context = {**context}
+    reminder_reply_waiting[user_id] = clean_context
+    await runtime_store.set_json(
+        _reminder_reply_key(user_id),
+        clean_context,
+        REMINDER_STATE_TTL_SECONDS,
+    )
+
+
+async def pop_reminder_reply_context(user_id: int) -> dict | None:
+    context = reminder_reply_waiting.pop(user_id, None)
+    if context is not None:
+        await runtime_store.delete(_reminder_reply_key(user_id))
+        return context
+
+    return await runtime_store.pop_json(_reminder_reply_key(user_id))
+
+
+async def clear_reminder_reply_context(user_id: int):
+    reminder_reply_waiting.pop(user_id, None)
+    await runtime_store.delete(_reminder_reply_key(user_id))
+
+
+async def is_consultation_waiting(user_id: int) -> bool:
+    if consultation_waiting_question.get(user_id):
+        return True
+
+    cached = await runtime_store.get_text(_consultation_waiting_key(user_id))
+    if cached == "1":
+        consultation_waiting_question[user_id] = True
+        return True
+
+    return False
+
+
+async def set_consultation_waiting(user_id: int):
+    consultation_waiting_question[user_id] = True
+    await runtime_store.set_text(
+        _consultation_waiting_key(user_id),
+        "1",
+        LEAD_STATE_TTL_SECONDS,
+    )
+
+
+async def clear_consultation_waiting(user_id: int):
+    consultation_waiting_question.pop(user_id, None)
+    await runtime_store.delete(_consultation_waiting_key(user_id))
+
+
+async def _set_reminder_schedule(user_id: int, chat_id: int, due_at: float):
+    await runtime_store.set_json(
+        _reminder_schedule_key(user_id),
+        {"user_id": user_id, "chat_id": chat_id, "due_at": due_at},
+        REMINDER_STATE_TTL_SECONDS,
+    )
+
+
+async def _clear_reminder_schedule(user_id: int):
+    await runtime_store.delete(_reminder_schedule_key(user_id))
+
+
+async def restore_pending_reminders(bot):
+    schedules = await runtime_store.scan_json("bot:state:reminder_schedule:")
+    for payload in schedules.values():
+        if not isinstance(payload, dict):
+            continue
+
+        user_id = payload.get("user_id")
+        chat_id = payload.get("chat_id")
+        due_at = payload.get("due_at")
+        if not isinstance(user_id, int) or not isinstance(chat_id, int):
+            continue
+        if not isinstance(due_at, (int, float)):
+            continue
+        if user_id in reminder_tasks:
+            continue
+
+        reminder_tasks[user_id] = asyncio.create_task(
+            schedule_abandoned_reminder(user_id, chat_id, bot, due_at=float(due_at))
+        )
+
+
+async def _get_cached_media_file_id(photo_ref: str | None) -> str | None:
+    key = media_cache_key(photo_ref)
+    if not key:
+        return None
+
+    cached = media_file_id_cache.get(key)
+    if cached:
+        return cached
+
+    cached = await runtime_store.get_text(_media_file_id_store_key(key))
+    if not cached:
+        return None
+
+    media_file_id_cache[key] = cached
+    return cached
+
+
+async def remember_sent_photo(photo_ref: str | None, sent_message: Message):
     key = media_cache_key(photo_ref)
     if not key:
         return
@@ -189,16 +562,63 @@ def remember_sent_photo(photo_ref: str | None, sent_message: Message):
     if not photo_sizes:
         return
 
-    media_file_id_cache[key] = photo_sizes[-1].file_id
+    new_file_id = photo_sizes[-1].file_id
+    if media_file_id_cache.get(key) == new_file_id:
+        return
+
+    media_file_id_cache[key] = new_file_id
+    await runtime_store.set_text(
+        _media_file_id_store_key(key),
+        new_file_id,
+        MEDIA_FILE_ID_TTL_SECONDS,
+    )
+    try:
+        _persist_media_file_id_cache()
+    except Exception:
+        return
 
 
-def cancel_reminder_task(user_id: int):
+def _png_to_jpeg_bytes(content: bytes, filename: str) -> BufferedInputFile | None:
+    try:
+        with Image.open(BytesIO(content)) as image:
+            image = ImageOps.exif_transpose(image)
+            image.load()
+            if image.mode in ("RGBA", "LA") or (image.mode == "P" and "transparency" in image.info):
+                image = image.convert("RGBA")
+                background = Image.new("RGB", image.size, (255, 255, 255))
+                background.paste(image, mask=image.getchannel("A"))
+                image = background
+            elif image.mode != "RGB":
+                image = image.convert("RGB")
+
+            image.thumbnail(
+                (TELEGRAM_IMAGE_MAX_SIZE, TELEGRAM_IMAGE_MAX_SIZE),
+                Image.Resampling.LANCZOS,
+            )
+
+            buffer = BytesIO()
+            image.save(
+                buffer,
+                format="JPEG",
+                quality=TELEGRAM_JPEG_QUALITY,
+                optimize=True,
+                progressive=True,
+            )
+    except (UnidentifiedImageError, OSError):
+        return None
+
+    safe_name = f"{Path(filename).stem or 'image'}.jpg"
+    return BufferedInputFile(buffer.getvalue(), filename=safe_name)
+
+
+async def cancel_reminder_task(user_id: int):
     task = reminder_tasks.pop(user_id, None)
     if task and not task.done():
         task.cancel()
+    await _clear_reminder_schedule(user_id)
 
 
-def touch_catalog_activity(
+async def touch_catalog_activity(
     user_id: int,
     bot,
     chat_id: int,
@@ -207,8 +627,7 @@ def touch_catalog_activity(
     product_id: int | None = None,
     product_name: str | None = None,
 ):
-    context = lead_requests.get(user_id, {}).copy()
-    context["bot"] = bot
+    context = await get_lead_request(user_id) or {}
     context["chat_id"] = chat_id
 
     if sub_id is not None:
@@ -218,47 +637,67 @@ def touch_catalog_activity(
     if product_name is not None:
         context["product_name"] = product_name
 
-    lead_requests[user_id] = context
-    reminder_reply_waiting.pop(user_id, None)
-    cancel_reminder_task(user_id)
-    reminder_tasks[user_id] = asyncio.create_task(schedule_abandoned_reminder(user_id, chat_id))
+    await asyncio.gather(
+        set_lead_request(user_id, context),
+        clear_reminder_reply_context(user_id),
+        cancel_reminder_task(user_id),
+    )
+    reminder_tasks[user_id] = asyncio.create_task(
+        schedule_abandoned_reminder(user_id, chat_id, bot)
+    )
 
 
-async def schedule_abandoned_reminder(user_id: int, chat_id: int):
+async def schedule_abandoned_reminder(user_id: int, chat_id: int, bot, due_at: float | None = None):
     current_task = asyncio.current_task()
     try:
+        if due_at is None:
+            try:
+                settings = await get_bot_settings()
+                delay_minutes = int(
+                    settings.get(
+                        "abandoned_reminder_delay_minutes",
+                        DEFAULT_ABANDONED_REMINDER_DELAY_MINUTES,
+                    )
+                )
+                if delay_minutes < 1:
+                    delay_minutes = 1
+            except Exception:
+                delay_minutes = DEFAULT_ABANDONED_REMINDER_DELAY_MINUTES
+            due_at = time.time() + delay_minutes * 60
+
+        await _set_reminder_schedule(user_id, chat_id, due_at)
+        wait_seconds = max(0.0, due_at - time.time())
+        if wait_seconds:
+            await asyncio.sleep(wait_seconds)
+
         try:
             settings = await get_bot_settings()
-            delay_minutes = int(
-                settings.get(
-                    "abandoned_reminder_delay_minutes",
-                    DEFAULT_ABANDONED_REMINDER_DELAY_MINUTES,
-                )
+            reminder_text = (
+                settings.get("abandoned_reminder_message")
+                or DEFAULT_ABANDONED_REMINDER_MESSAGE
             )
-            if delay_minutes < 1:
-                delay_minutes = 1
-            reminder_text = settings.get("abandoned_reminder_message") or DEFAULT_ABANDONED_REMINDER_MESSAGE
         except Exception:
-            delay_minutes = DEFAULT_ABANDONED_REMINDER_DELAY_MINUTES
             reminder_text = DEFAULT_ABANDONED_REMINDER_MESSAGE
 
-        await asyncio.sleep(delay_minutes * 60)
-
-        context = lead_requests.get(user_id)
+        context = await get_lead_request(user_id)
         if not context:
             return
 
-        sent = await context["bot"].send_message(
+        sent = await bot.send_message(
             chat_id,
             f"{reminder_text}\n\nОтветьте на это сообщение, и я снова попрошу номер телефона.",
         )
-        reminder_reply_waiting[user_id] = {
+        await set_reminder_reply_context(
+            user_id,
+            {
             **context,
             "prompt_message_id": sent.message_id,
-        }
+            },
+        )
     finally:
         if reminder_tasks.get(user_id) is current_task:
             reminder_tasks.pop(user_id, None)
+            await _clear_reminder_schedule(user_id)
 
 
 async def photo_payload(photo_ref: str | None):
@@ -268,29 +707,53 @@ async def photo_payload(photo_ref: str | None):
     if _looks_like_telegram_file_id(photo_ref):
         return photo_ref
 
+    cached_file_id = await _get_cached_media_file_id(photo_ref)
+    if cached_file_id:
+        return cached_file_id
+
     local_path = _resolve_local_media_path(photo_ref)
     if local_path:
+        if local_path.suffix.lower() == ".png":
+            try:
+                content = await asyncio.to_thread(local_path.read_bytes)
+            except Exception:
+                return None
+            converted = _png_to_jpeg_bytes(content, local_path.name)
+            if converted:
+                return converted
         return FSInputFile(local_path)
 
     value = full_media_url(photo_ref)
     if not value:
         return None
 
-    cached_file_id = media_file_id_cache.get(value)
-    if cached_file_id:
-        return cached_file_id
-
     if value.startswith("http://") or value.startswith("https://"):
+        if _is_png_ref(value):
+            filename = Path(value.split("?", 1)[0]).name or "image.png"
+            try:
+                content = await fetch_bytes(value, cache_seconds=300)
+            except Exception:
+                return None
+            if not content:
+                return None
+            converted = _png_to_jpeg_bytes(content, filename)
+            if converted:
+                return converted
+
         if not is_local_url(value):
             return value
 
         filename = Path(value.split("?", 1)[0]).name or "image.jpg"
         try:
-            content = await fetch_bytes(value, cache_seconds=90)
+            content = await fetch_bytes(value, cache_seconds=300)
         except Exception:
             return None
         if not content:
             return None
+        if _is_png_ref(value):
+            converted = _png_to_jpeg_bytes(content, filename)
+            if converted:
+                return converted
         return BufferedInputFile(content, filename=filename)
 
     return value
@@ -346,9 +809,7 @@ async def safe_delete_message(message: Message | None):
 
 
 async def send_subcategories_menu(callback: CallbackQuery, cat_id: int):
-    subcategories = await get_subcategories(cat_id)
-    for s in subcategories:
-        subcategories_cache[s["id"]] = s
+    subcategories = await get_subcategories_cached(cat_id)
 
     category_name = categories_cache.get(cat_id, f"Категория {cat_id}")
 
@@ -405,7 +866,7 @@ async def send_products_menu(callback: CallbackQuery, sub_id: int):
             reply_markup=keyboard,
         )
         if sent:
-            remember_sent_photo(sub_image, sent)
+            await remember_sent_photo(sub_image, sent)
             return
 
     await callback.message.answer(caption, parse_mode="Markdown", reply_markup=keyboard)
@@ -447,7 +908,7 @@ async def send_product_card(callback: CallbackQuery, sub_id: int, product_id: in
             reply_markup=keyboard,
         )
         if sent:
-            remember_sent_photo(product.get("image_file_id"), sent)
+            await remember_sent_photo(product.get("image_file_id"), sent)
             return
 
     await callback.message.answer(text, parse_mode="Markdown", reply_markup=keyboard)

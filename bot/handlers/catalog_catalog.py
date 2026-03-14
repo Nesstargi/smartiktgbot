@@ -1,16 +1,17 @@
-﻿from aiogram import F
+from aiogram import F
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from bot.api_client import get_categories
 from bot.handlers.menu import menu
 
 from .catalog_common import (
     categories_cache,
-    consultation_waiting_question,
+    clear_consultation_waiting,
     crumb,
+    get_categories_cached,
     get_products_cached,
     lead_contact_keyboard,
     router,
+    schedule_catalog_warmup,
     send_product_card,
     send_products_menu,
     send_subcategories_menu,
@@ -21,14 +22,12 @@ from .catalog_common import (
 
 @router.message(F.text == "🛒 Каталог")
 async def show_categories(message: Message):
-    consultation_waiting_question.pop(message.from_user.id if message.from_user else 0, None)
     if message.from_user:
-        touch_catalog_activity(message.from_user.id, message.bot, message.chat.id)
+        await clear_consultation_waiting(message.from_user.id)
+        await touch_catalog_activity(message.from_user.id, message.bot, message.chat.id)
 
-    categories = await get_categories()
-    categories_cache.clear()
-    for cat in categories:
-        categories_cache[cat["id"]] = cat["name"]
+    categories = await get_categories_cached()
+    schedule_catalog_warmup()
 
     kb = [[InlineKeyboardButton(text=cat["name"], callback_data=f"cat_{cat['id']}")] for cat in categories]
     kb.append([InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")])
@@ -39,7 +38,7 @@ async def show_categories(message: Message):
 async def show_subcategories(callback: CallbackQuery):
     await callback.answer()
     cat_id = int(callback.data.split("_")[1])
-    touch_catalog_activity(callback.from_user.id, callback.bot, callback.message.chat.id)
+    await touch_catalog_activity(callback.from_user.id, callback.bot, callback.message.chat.id)
     await send_subcategories_menu(callback, cat_id)
 
 
@@ -47,7 +46,7 @@ async def show_subcategories(callback: CallbackQuery):
 async def show_products(callback: CallbackQuery):
     await callback.answer()
     sub_id = int(callback.data.split("_")[1])
-    touch_catalog_activity(callback.from_user.id, callback.bot, callback.message.chat.id, sub_id=sub_id)
+    await touch_catalog_activity(callback.from_user.id, callback.bot, callback.message.chat.id, sub_id=sub_id)
     await send_products_menu(callback, sub_id)
 
 
@@ -55,7 +54,7 @@ async def show_products(callback: CallbackQuery):
 async def show_product_card(callback: CallbackQuery):
     await callback.answer()
     _, sub_id, product_id = callback.data.split("_")
-    touch_catalog_activity(
+    await touch_catalog_activity(
         callback.from_user.id,
         callback.bot,
         callback.message.chat.id,
@@ -82,8 +81,8 @@ async def lead_start(callback: CallbackQuery):
     product_name = prod.get("name") if prod else f"Товар {product_id_i}"
 
     user_id = callback.from_user.id
-    consultation_waiting_question.pop(user_id, None)
-    touch_catalog_activity(
+    await clear_consultation_waiting(user_id)
+    await touch_catalog_activity(
         user_id,
         callback.bot,
         callback.message.chat.id,
@@ -104,22 +103,22 @@ async def lead_start(callback: CallbackQuery):
 async def back_to_subs(callback: CallbackQuery):
     await callback.answer()
     cat_id = int(callback.data.split("_")[2])
-    touch_catalog_activity(callback.from_user.id, callback.bot, callback.message.chat.id)
+    await touch_catalog_activity(callback.from_user.id, callback.bot, callback.message.chat.id)
     await send_subcategories_menu(callback, cat_id)
 
 
 @router.callback_query(F.data == "main_menu")
 async def back_to_main(callback: CallbackQuery):
     await callback.answer()
-    touch_catalog_activity(callback.from_user.id, callback.bot, callback.message.chat.id)
-    consultation_waiting_question.pop(callback.from_user.id, None)
+    await touch_catalog_activity(callback.from_user.id, callback.bot, callback.message.chat.id)
+    await clear_consultation_waiting(callback.from_user.id)
     await callback.message.answer("🏠 Главное меню\n\nВыберите пункт меню 👇", reply_markup=menu)
 
 
 @router.callback_query(F.data == "back_categories")
 async def back_categories(callback: CallbackQuery):
     await callback.answer()
-    touch_catalog_activity(callback.from_user.id, callback.bot, callback.message.chat.id)
+    await touch_catalog_activity(callback.from_user.id, callback.bot, callback.message.chat.id)
     await show_categories(callback.message)
 
 

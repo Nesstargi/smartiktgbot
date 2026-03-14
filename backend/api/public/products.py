@@ -1,21 +1,22 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+
 from backend.database import get_db
-from backend.models import Product
+from backend.models import Product, SubCategory
+from backend.schemas.product import ProductOut
 
 router = APIRouter()
 
 
-@router.get("/products/{sub_id}")
+@router.get("/products/{sub_id}", response_model=list[ProductOut])
 def get_products(sub_id: int, db: Session = Depends(get_db)):
-    products = db.query(Product).filter(Product.subcategory_id == sub_id).all()
-    return [
-        {
-            "id": p.id,
-            "name": p.name,
-            "description": p.description,
-            "subcategory_id": p.subcategory_id,
-            "image_file_id": p.image_file_id,
-        }
-        for p in products
-    ]
+    subcategory = db.query(SubCategory).filter(SubCategory.id == sub_id).first()
+    if not subcategory:
+        raise HTTPException(status_code=404, detail="Subcategory not found")
+
+    return (
+        db.query(Product)
+        .filter(Product.subcategory_id == sub_id)
+        .order_by(Product.id.asc())
+        .all()
+    )

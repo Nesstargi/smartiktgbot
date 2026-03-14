@@ -4,13 +4,13 @@ from sqlalchemy.orm import Session
 from backend.core.deps import PERMISSION_MANAGE_NOTIFICATIONS, require_permission
 from backend.database import get_db
 from backend.models.lead import Lead
-from backend.schemas.notification import BroadcastNotificationIn
+from backend.schemas.notification import BroadcastNotificationIn, BroadcastNotificationOut
 from backend.services.notification_service import NotificationService
 
 router = APIRouter()
 
 
-@router.post("/broadcast")
+@router.post("/broadcast", response_model=BroadcastNotificationOut)
 async def broadcast_notification(
     data: BroadcastNotificationIn,
     db: Session = Depends(get_db),

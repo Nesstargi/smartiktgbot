@@ -1,13 +1,13 @@
-﻿import api from "./axios";
+import api, { toListResult } from "./axios";
 
 export async function getSubcategoriesByCategory(categoryId) {
   const res = await api.get(`/api/subcategories/${categoryId}`);
   return res.data;
 }
 
-export async function getAllSubcategories() {
-  const res = await api.get("/admin/subcategories/");
-  return res.data;
+export async function getAllSubcategories(params = {}) {
+  const res = await api.get("/admin/subcategories/", { params });
+  return toListResult(res);
 }
 
 export async function createSubcategory(data) {

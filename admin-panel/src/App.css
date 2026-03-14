@@ -113,6 +113,23 @@
   gap: 12px;
 }
 
+.stats-summary-grid,
+.insights-grid,
+.result-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.stats-summary-grid {
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  margin-top: 16px;
+}
+
+.insights-grid {
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  margin-top: 16px;
+}
+
 .card {
   border: 1px solid #111;
   padding: 16px;
@@ -125,6 +142,20 @@
 
 .stat-value {
   font-size: 28px;
+}
+
+.metric-card,
+.insight-card,
+.preview-card,
+.result-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.metric-caption {
+  margin: 0;
+  color: #555;
 }
 
 .muted {
@@ -164,6 +195,24 @@ button:hover {
 
 .ghost-btn {
   margin-top: auto;
+}
+
+.stats-header,
+.inline-actions,
+.counter-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.stats-header {
+  margin-bottom: 16px;
+}
+
+.result-grid {
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
 }
 
 .table {
@@ -234,7 +283,10 @@ button:hover {
   }
 
   .panel-grid,
-  .stats-grid {
+  .stats-grid,
+  .stats-summary-grid,
+  .insights-grid,
+  .result-grid {
     grid-template-columns: 1fr;
   }
 
@@ -289,6 +341,29 @@ button:hover {
   margin: 0;
 }
 
+.list-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.pagination-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.pagination-controls button[disabled] {
+  opacity: 0.55;
+  cursor: default;
+}
+
 @media (max-width: 720px) {
   .sidebar {
     padding: 18px 16px;
@@ -330,6 +405,12 @@ button:hover {
     gap: 16px;
   }
 
+  .stats-header,
+  .inline-actions,
+  .counter-row {
+    align-items: stretch;
+  }
+
   .page-title {
     font-size: 20px;
     margin-bottom: 8px;
@@ -344,6 +425,11 @@ button:hover {
     align-items: stretch;
   }
 
+  .list-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .table th,
   .table td {
     padding: 8px 6px;
@@ -351,6 +437,10 @@ button:hover {
   }
 
   .actions {
+    justify-content: flex-start;
+  }
+
+  .pagination-controls {
     justify-content: flex-start;
   }
 

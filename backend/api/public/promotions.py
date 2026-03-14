@@ -3,20 +3,15 @@ from sqlalchemy.orm import Session
 
 from backend.config import BOT_API_TOKEN
 from backend.database import get_db
-from backend.models.promotion import Promotion
 from backend.schemas.promotion import PromotionFileIdUpdate, PromotionOut
+from backend.services.promotion_service import PromotionService
 
 router = APIRouter()
 
 
 @router.get("/promotions", response_model=list[PromotionOut])
 def get_promotions(db: Session = Depends(get_db)):
-    return (
-        db.query(Promotion)
-        .filter(Promotion.is_active.is_(True))
-        .order_by(Promotion.id.desc())
-        .all()
-    )
+    return PromotionService.list_active(db)
 
 
 @router.post("/promotions/{promotion_id}/file-id", response_model=PromotionOut)
@@ -29,7 +24,7 @@ def set_promotion_file_id(
     if BOT_API_TOKEN and x_bot_token != BOT_API_TOKEN:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    item = db.query(Promotion).filter(Promotion.id == promotion_id).first()
+    item = PromotionService.get_by_id(db, promotion_id)
     if not item:
         raise HTTPException(status_code=404, detail="Promotion not found")
 

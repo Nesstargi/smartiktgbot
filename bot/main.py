@@ -1,33 +1,50 @@
-﻿import asyncio
+import asyncio
+import logging
 import os
 from pathlib import Path
 
-from aiogram import Bot, Dispatcher
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
-from bot.api_client import close_http_session
-from bot.handlers.catalog import router as catalog_router
-from bot.handlers.menu import router as menu_router
+from bot.runtime import (
+    delete_webhook,
+    get_webhook_url,
+    has_bot_token,
+    is_webhook_mode,
+    shutdown_bot_runtime,
+    startup_bot_runtime,
+)
 
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-if not TOKEN:
-    raise RuntimeError("TELEGRAM_BOT_TOKEN is not set")
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+logger = logging.getLogger(__name__)
 
 
 async def main():
-    bot = Bot(token=TOKEN)
-    dp = Dispatcher()
+    if not has_bot_token():
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is not set")
 
-    dp.include_router(menu_router)
-    dp.include_router(catalog_router)
+    if is_webhook_mode():
+        logger.info(
+            "BOT_DELIVERY_MODE=webhook. Telegram updates are handled by backend webhook at %s",
+            get_webhook_url() or "TELEGRAM_WEBHOOK_BASE_URL + TELEGRAM_WEBHOOK_PATH",
+        )
+        await asyncio.Event().wait()
+        return
+
+    bot, dispatcher = await startup_bot_runtime()
+    if bot is None:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is not set")
+
+    await delete_webhook(drop_pending_updates=False)
 
     try:
-        await dp.start_polling(bot)
+        await dispatcher.start_polling(
+            bot,
+            allowed_updates=dispatcher.resolve_used_update_types(),
+        )
     finally:
-        await close_http_session()
-        await bot.session.close()
+        await shutdown_bot_runtime()
 
 
 if __name__ == "__main__":

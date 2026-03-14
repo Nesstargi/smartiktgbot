@@ -1,13 +1,20 @@
-from pydantic import BaseModel, ConfigDict
-from typing import Optional
+from typing import Annotated
+
+from pydantic import BaseModel, ConfigDict, StringConstraints
+
+
+CategoryName = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=120),
+]
 
 
 class CategoryCreate(BaseModel):
-    name: str
+    name: CategoryName
 
 
 class CategoryUpdate(BaseModel):
-    name: Optional[str] = None
+    name: CategoryName | None = None
 
 
 class CategoryOut(BaseModel):

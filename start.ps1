@@ -23,7 +23,7 @@ if ($InstallDeps) {
     $adminDeps = "if (!(Test-Path 'node_modules')) { npm install }; "
 }
 
-$backendCmd = $backendPrefix + $backendDeps + "uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000"
+$backendCmd = $backendPrefix + $backendDeps + "python -m alembic upgrade head; uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000"
 $adminCmd = $adminPrefix + $adminDeps + "npm run dev"
 $botCmd = $botPrefix + "python -m bot.main"
 

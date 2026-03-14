@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { getApiErrorMessage } from "../api/axios";
 import {
   createAdminUser,
   deleteAdminUser,
@@ -8,6 +9,8 @@ import {
   updateAdminPermissions,
   updateAdminRole,
 } from "../api/users.api";
+
+const PAGE_SIZE = 10;
 
 const PERMISSION_LABELS = {
   manage_categories: "Категории",
@@ -30,22 +33,13 @@ function normalizePermissions(values) {
   return Array.from(new Set(values)).sort();
 }
 
-function getErrorMessage(error) {
-  const detail = error?.response?.data?.detail;
-  if (Array.isArray(detail)) {
-    const messages = detail.map((item) => item?.msg).filter(Boolean);
-    if (messages.length) return messages.join(", ");
-    return "Ошибка валидации";
-  }
-  if (detail) return detail;
-  if (error?.message) return error.message;
-  return "Не удалось создать администратора";
-}
-
 export default function UsersPage() {
   const [users, setUsers] = useState([]);
+  const [totalUsers, setTotalUsers] = useState(0);
   const [availablePermissions, setAvailablePermissions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [permissionsLoading, setPermissionsLoading] = useState(true);
+  const [listError, setListError] = useState("");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -59,31 +53,109 @@ export default function UsersPage() {
   const [editingPermissions, setEditingPermissions] = useState([]);
   const [savingPermissionsFor, setSavingPermissionsFor] = useState(null);
 
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(0);
+  const [reloadToken, setReloadToken] = useState(0);
+
   const canSubmit = useMemo(() => email.trim() && password.trim().length >= 8, [email, password]);
   const passwordInvalid = useMemo(
     () => password.trim().length > 0 && password.trim().length < 8,
     [password],
   );
+  const canGoPrev = page > 0;
+  const canGoNext = (page + 1) * PAGE_SIZE < totalUsers;
+  const resultsLabel = useMemo(() => {
+    if (totalUsers === 0 || users.length === 0) return "Ничего не найдено";
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      const [u, p] = await Promise.all([getAdminUsers(), getAvailablePermissions()]);
-      setUsers(u || []);
-      setAvailablePermissions(p || []);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const start = page * PAGE_SIZE + 1;
+    const end = page * PAGE_SIZE + users.length;
+    return `Показано ${start}-${end} из ${totalUsers}`;
+  }, [page, totalUsers, users.length]);
 
   useEffect(() => {
-    load();
+    let cancelled = false;
+
+    async function loadPermissions() {
+      setPermissionsLoading(true);
+      try {
+        const permissions = await getAvailablePermissions();
+        if (!cancelled) {
+          setAvailablePermissions(permissions || []);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setCreateError(getApiErrorMessage(error, "Не удалось загрузить права"));
+        }
+      } finally {
+        if (!cancelled) {
+          setPermissionsLoading(false);
+        }
+      }
+    }
+
+    loadPermissions();
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadUsers() {
+      setLoading(true);
+      setListError("");
+      try {
+        const result = await getAdminUsers({
+          q: searchQuery || undefined,
+          limit: PAGE_SIZE,
+          offset: page * PAGE_SIZE,
+        });
+
+        if (!cancelled) {
+          setUsers(result.items || []);
+          setTotalUsers(result.total || 0);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setUsers([]);
+          setTotalUsers(0);
+          setListError(getApiErrorMessage(error, "Не удалось загрузить список администраторов"));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadUsers();
+    return () => {
+      cancelled = true;
+    };
+  }, [page, reloadToken, searchQuery]);
+
+  const refreshUsers = () => {
+    setReloadToken((prev) => prev + 1);
+  };
 
   const togglePermission = (perm) => {
     setSelectedPermissions((prev) =>
-      prev.includes(perm) ? prev.filter((p) => p !== perm) : [...prev, perm],
+      prev.includes(perm) ? prev.filter((item) => item !== perm) : [...prev, perm],
     );
+  };
+
+  const onSearchSubmit = (e) => {
+    e.preventDefault();
+    setPage(0);
+    setSearchQuery(searchInput.trim());
+  };
+
+  const onClearSearch = () => {
+    setSearchInput("");
+    setSearchQuery("");
+    setPage(0);
   };
 
   const onCreate = async (e) => {
@@ -113,9 +185,12 @@ export default function UsersPage() {
       setIsSuperAdmin(false);
       setSelectedPermissions([]);
       setCreateSuccess("Администратор создан");
-      await load();
+      setSearchInput("");
+      setSearchQuery("");
+      setPage(0);
+      refreshUsers();
     } catch (error) {
-      setCreateError(getErrorMessage(error));
+      setCreateError(getApiErrorMessage(error, "Не удалось создать администратора"));
     } finally {
       setCreating(false);
     }
@@ -133,32 +208,50 @@ export default function UsersPage() {
 
   const onToggleEditingPermission = (perm) => {
     setEditingPermissions((prev) =>
-      prev.includes(perm) ? prev.filter((p) => p !== perm) : [...prev, perm],
+      prev.includes(perm) ? prev.filter((item) => item !== perm) : [...prev, perm],
     );
   };
 
   const onSavePermissions = async (user) => {
+    setListError("");
     setSavingPermissionsFor(user.id);
     try {
       await updateAdminPermissions(user.id, normalizePermissions(editingPermissions));
       setEditingUserId(null);
       setEditingPermissions([]);
-      await load();
+      refreshUsers();
+    } catch (error) {
+      setListError(getApiErrorMessage(error, "Не удалось обновить права"));
     } finally {
       setSavingPermissionsFor(null);
     }
   };
 
   const onToggleSuperAdmin = async (user) => {
-    const has = (user.roles || []).includes("super_admin");
-    await updateAdminRole(user.id, !has);
-    await load();
+    setListError("");
+    try {
+      const has = (user.roles || []).includes("super_admin");
+      await updateAdminRole(user.id, !has);
+      refreshUsers();
+    } catch (error) {
+      setListError(getApiErrorMessage(error, "Не удалось обновить роль"));
+    }
   };
 
   const onDelete = async (user) => {
     if (!window.confirm(`Удалить пользователя ${user.email}?`)) return;
-    await deleteAdminUser(user.id);
-    await load();
+
+    setListError("");
+    try {
+      await deleteAdminUser(user.id);
+      if (users.length === 1 && page > 0) {
+        setPage((prev) => prev - 1);
+        return;
+      }
+      refreshUsers();
+    } catch (error) {
+      setListError(getApiErrorMessage(error, "Не удалось удалить пользователя"));
+    }
   };
 
   return (
@@ -199,20 +292,24 @@ export default function UsersPage() {
             Назначить super_admin
           </label>
 
-          <div className="permissions-grid">
-            {availablePermissions.map((perm) => (
-              <label key={perm} className="checkbox" title={perm}>
-                <input
-                  type="checkbox"
-                  checked={selectedPermissions.includes(perm)}
-                  onChange={() => togglePermission(perm)}
-                />
-                {formatPermission(perm)}
-              </label>
-            ))}
-          </div>
+          {permissionsLoading ? (
+            <p className="muted">Загрузка прав...</p>
+          ) : (
+            <div className="permissions-grid">
+              {availablePermissions.map((perm) => (
+                <label key={perm} className="checkbox" title={perm}>
+                  <input
+                    type="checkbox"
+                    checked={selectedPermissions.includes(perm)}
+                    onChange={() => togglePermission(perm)}
+                  />
+                  {formatPermission(perm)}
+                </label>
+              ))}
+            </div>
+          )}
 
-          <button type="submit" disabled={!canSubmit || creating}>
+          <button type="submit" disabled={!canSubmit || creating || permissionsLoading}>
             {creating ? "Создание..." : "Создать"}
           </button>
           {createError && <p className="error-text">{createError}</p>}
@@ -222,8 +319,32 @@ export default function UsersPage() {
 
       <article className="card">
         <h3>Список админов</h3>
+
+        <div className="list-toolbar">
+          <form className="inline-form" onSubmit={onSearchSubmit}>
+            <input
+              placeholder="Поиск по email"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+            />
+            <button type="submit">Найти</button>
+            <button
+              type="button"
+              onClick={onClearSearch}
+              disabled={!searchInput && !searchQuery}
+            >
+              Сбросить
+            </button>
+          </form>
+          <p className="muted">{loading ? "Загрузка..." : resultsLabel}</p>
+        </div>
+
+        {listError && <p className="error-text">{listError}</p>}
+
         {loading ? (
           <p className="muted">Загрузка...</p>
+        ) : users.length === 0 ? (
+          <p className="muted">Администраторы не найдены.</p>
         ) : (
           <div className="table-wrap">
             <table className="table table-compact">
@@ -290,8 +411,17 @@ export default function UsersPage() {
             </table>
           </div>
         )}
+
+        <div className="pagination-controls">
+          <button type="button" onClick={() => setPage((prev) => prev - 1)} disabled={!canGoPrev}>
+            Назад
+          </button>
+          <span className="muted">Страница {page + 1}</span>
+          <button type="button" onClick={() => setPage((prev) => prev + 1)} disabled={!canGoNext}>
+            Вперёд
+          </button>
+        </div>
       </article>
     </section>
   );
 }
-

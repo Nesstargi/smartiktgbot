@@ -1,11 +1,31 @@
-﻿from pydantic import BaseModel, ConfigDict
+from typing import Annotated
+
+from pydantic import BaseModel, ConfigDict, StringConstraints
+
+
+PromotionTitle = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=128),
+]
+PromotionDescription = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=4096),
+]
+PromotionImageUrl = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=2048),
+]
+PromotionImageFileId = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=1024),
+]
 
 
 class PromotionBase(BaseModel):
-    title: str
-    description: str | None = None
-    image_url: str | None = None
-    image_file_id: str | None = None
+    title: PromotionTitle
+    description: PromotionDescription | None = None
+    image_url: PromotionImageUrl | None = None
+    image_file_id: PromotionImageFileId | None = None
     is_active: bool = True
 
 
@@ -14,10 +34,10 @@ class PromotionCreate(PromotionBase):
 
 
 class PromotionUpdate(BaseModel):
-    title: str | None = None
-    description: str | None = None
-    image_url: str | None = None
-    image_file_id: str | None = None
+    title: PromotionTitle | None = None
+    description: PromotionDescription | None = None
+    image_url: PromotionImageUrl | None = None
+    image_file_id: PromotionImageFileId | None = None
     is_active: bool | None = None
 
 
@@ -28,4 +48,4 @@ class PromotionOut(PromotionBase):
 
 
 class PromotionFileIdUpdate(BaseModel):
-    image_file_id: str
+    image_file_id: PromotionImageFileId

@@ -1,9 +1,10 @@
-﻿import os
-import time
+import os
 from pathlib import Path
 
 import aiohttp
 from dotenv import load_dotenv
+
+from bot.runtime_store import runtime_store
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
@@ -11,7 +12,6 @@ API_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
 BOT_API_TOKEN = os.getenv("BOT_API_TOKEN", "")
 
 _session: aiohttp.ClientSession | None = None
-_cache: dict[str, tuple[float, object]] = {}
 
 
 DEFAULT_TIMEOUT = aiohttp.ClientTimeout(total=8)
@@ -24,30 +24,15 @@ def _url(path: str) -> str:
 async def _get_session() -> aiohttp.ClientSession:
     global _session
     if _session is None or _session.closed:
-        connector = aiohttp.TCPConnector(limit=30, ttl_dns_cache=300)
+        connector = aiohttp.TCPConnector(limit=50, ttl_dns_cache=300)
         _session = aiohttp.ClientSession(timeout=DEFAULT_TIMEOUT, connector=connector)
     return _session
-
-
-def _cache_get(key: str):
-    hit = _cache.get(key)
-    if not hit:
-        return None
-    expires_at, value = hit
-    if expires_at < time.monotonic():
-        _cache.pop(key, None)
-        return None
-    return value
-
-
-def _cache_set(key: str, value, ttl_seconds: int):
-    _cache[key] = (time.monotonic() + ttl_seconds, value)
 
 
 async def _get(path: str, cache_seconds: int = 0):
     key = f"GET:{path}"
     if cache_seconds > 0:
-        cached = _cache_get(key)
+        cached = await runtime_store.get_json(f"api:json:{key}")
         if cached is not None:
             return cached
 
@@ -57,13 +42,13 @@ async def _get(path: str, cache_seconds: int = 0):
         data = await resp.json()
 
     if cache_seconds > 0:
-        _cache_set(key, data, cache_seconds)
+        await runtime_store.set_json(f"api:json:{key}", data, cache_seconds)
     return data
 
 
-async def fetch_bytes(url: str, cache_seconds: int = 60) -> bytes | None:
+async def fetch_bytes(url: str, cache_seconds: int = 300) -> bytes | None:
     key = f"BYTES:{url}"
-    cached = _cache_get(key)
+    cached = await runtime_store.get_bytes(f"api:bytes:{key}")
     if cached is not None:
         return cached
 
@@ -77,24 +62,24 @@ async def fetch_bytes(url: str, cache_seconds: int = 60) -> bytes | None:
         return None
 
     if cache_seconds > 0:
-        _cache_set(key, data, cache_seconds)
+        await runtime_store.set_bytes(f"api:bytes:{key}", data, cache_seconds)
     return data
 
 
 async def get_categories():
-    return await _get("/api/categories", cache_seconds=120)
+    return await _get("/api/categories", cache_seconds=300)
 
 
 async def get_subcategories(cat_id: int):
-    return await _get(f"/api/subcategories/{cat_id}", cache_seconds=120)
+    return await _get(f"/api/subcategories/{cat_id}", cache_seconds=300)
 
 
 async def get_products(sub_id: int):
-    return await _get(f"/api/products/{sub_id}", cache_seconds=60)
+    return await _get(f"/api/products/{sub_id}", cache_seconds=180)
 
 
 async def get_promotions():
-    return await _get("/api/promotions", cache_seconds=30)
+    return await _get("/api/promotions", cache_seconds=60)
 
 
 async def update_promotion_file_id(promotion_id: int, image_file_id: str):
@@ -118,7 +103,7 @@ async def update_promotion_file_id(promotion_id: int, image_file_id: str):
 
 
 async def get_bot_settings():
-    return await _get("/api/bot-settings", cache_seconds=10)
+    return await _get("/api/bot-settings", cache_seconds=20)
 
 
 async def create_lead(payload: dict):

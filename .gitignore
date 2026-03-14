@@ -10,7 +10,9 @@ venv311/
 
 # Local database and runtime artifacts
 *.sqlite3
-backend/media/
+backend/media/*
+!backend/media/.gitkeep
+bot/cache/
 pgdata/
 
 # Frontend

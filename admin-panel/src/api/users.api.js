@@ -1,8 +1,8 @@
-﻿import api from "./axios";
+import api, { toListResult } from "./axios";
 
-export const getAdminUsers = async () => {
-  const res = await api.get("/admin/users/");
-  return res.data;
+export const getAdminUsers = async (params = {}) => {
+  const res = await api.get("/admin/users/", { params });
+  return toListResult(res);
 };
 
 export const getAvailablePermissions = async () => {

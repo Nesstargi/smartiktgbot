@@ -78,7 +78,15 @@ export default function ProductForm({ categories, onSubmit }) {
         onChange={(e) => handleImageUpload(e.target.files[0])}
       />
 
-      {image && <img src={image} style={{ width: 100, marginTop: 10 }} />}
+      {image && (
+        <img
+          src={image}
+          alt="Предпросмотр товара"
+          decoding="async"
+          width={100}
+          style={{ width: 100, marginTop: 10 }}
+        />
+      )}
 
       <button type="submit">Сохранить</button>
     </form>
