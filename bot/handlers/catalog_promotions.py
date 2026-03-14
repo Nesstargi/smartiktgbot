@@ -10,6 +10,7 @@ from .catalog_common import (
     photo_payload,
     remember_sent_photo,
     router,
+    send_photo_with_fallback,
 )
 
 
@@ -40,14 +41,28 @@ async def show_promotions(message: Message):
         if photo:
             try:
                 if len(text) <= 1024:
-                    sent = await message.answer_photo(photo=photo, caption=text, parse_mode="Markdown")
-                    remember_sent_photo(item.get("image_url"), sent)
-                    continue
+                    sent = await send_photo_with_fallback(
+                        message,
+                        photo,
+                        caption=text,
+                        image_url=item.get("image_url"),
+                        parse_mode="Markdown",
+                    )
+                    if sent:
+                        remember_sent_photo(item.get("image_url"), sent)
+                        continue
 
-                sent = await message.answer_photo(photo=photo)
-                remember_sent_photo(item.get("image_url"), sent)
-                await message.answer(text, parse_mode="Markdown")
-                continue
+                sent = await send_photo_with_fallback(
+                    message,
+                    photo,
+                    caption=None,
+                    image_url=item.get("image_url"),
+                    parse_mode="Markdown",
+                )
+                if sent:
+                    remember_sent_photo(item.get("image_url"), sent)
+                    await message.answer(text, parse_mode="Markdown")
+                    continue
             except Exception:
                 pass
         await message.answer(text, parse_mode="Markdown")

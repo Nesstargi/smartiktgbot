@@ -296,6 +296,46 @@ async def photo_payload(photo_ref: str | None):
     return value
 
 
+def _is_png_ref(photo_ref: str | None) -> bool:
+    if not photo_ref:
+        return False
+    value = str(photo_ref).strip().lower()
+    if not value:
+        return False
+    value = value.split("?", 1)[0]
+    return value.endswith(".png")
+
+
+async def send_photo_with_fallback(
+    message: Message,
+    photo,
+    *,
+    caption: str | None = None,
+    image_url: str | None = None,
+    parse_mode: str | None = "Markdown",
+    reply_markup=None,
+):
+    try:
+        return await message.answer_photo(
+            photo=photo,
+            caption=caption,
+            parse_mode=parse_mode,
+            reply_markup=reply_markup,
+        )
+    except Exception:
+        if _is_png_ref(image_url):
+            try:
+                return await message.answer_document(
+                    document=photo,
+                    caption=caption,
+                    parse_mode=parse_mode,
+                    reply_markup=reply_markup,
+                )
+            except Exception:
+                return None
+        return None
+
+
 async def safe_delete_message(message: Message | None):
     if not message:
         return
@@ -356,17 +396,17 @@ async def send_products_menu(callback: CallbackQuery, sub_id: int):
     asyncio.create_task(safe_delete_message(callback.message))
 
     if photo:
-        try:
-            sent = await callback.message.answer_photo(
-                photo=photo,
-                caption=caption,
-                parse_mode="Markdown",
-                reply_markup=keyboard,
-            )
+        sent = await send_photo_with_fallback(
+            callback.message,
+            photo,
+            caption=caption,
+            image_url=sub_image,
+            parse_mode="Markdown",
+            reply_markup=keyboard,
+        )
+        if sent:
             remember_sent_photo(sub_image, sent)
             return
-        except Exception:
-            pass
 
     await callback.message.answer(caption, parse_mode="Markdown", reply_markup=keyboard)
 
@@ -398,17 +438,17 @@ async def send_product_card(callback: CallbackQuery, sub_id: int, product_id: in
     asyncio.create_task(safe_delete_message(callback.message))
 
     if photo:
-        try:
-            sent = await callback.message.answer_photo(
-                photo=photo,
-                caption=text,
-                parse_mode="Markdown",
-                reply_markup=keyboard,
-            )
+        sent = await send_photo_with_fallback(
+            callback.message,
+            photo,
+            caption=text,
+            image_url=product.get("image_file_id"),
+            parse_mode="Markdown",
+            reply_markup=keyboard,
+        )
+        if sent:
             remember_sent_photo(product.get("image_file_id"), sent)
             return
-        except Exception:
-            pass
 
     await callback.message.answer(text, parse_mode="Markdown", reply_markup=keyboard)
 
