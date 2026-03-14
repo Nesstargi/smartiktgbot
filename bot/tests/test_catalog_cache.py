@@ -1,5 +1,8 @@
 import asyncio
 
+from aiogram.exceptions import TelegramNetworkError
+from aiogram.methods import SendMessage
+
 from bot.handlers import catalog_common
 
 
@@ -60,3 +63,36 @@ def test_warm_catalog_cache_prefetches_subcategories(monkeypatch):
     assert catalog_common.categories_cache == {10: "Phones", 20: "Laptops"}
     assert catalog_common.subcategories_cache[11]["category_id"] == 10
     assert catalog_common.subcategories_cache[21]["category_id"] == 20
+
+
+def test_safe_callback_answer_uses_short_timeout():
+    calls = {}
+
+    class FakeCallback:
+        data = "cat_1"
+        from_user = type("User", (), {"id": 7})()
+
+        async def answer(self, **kwargs):
+            calls.update(kwargs)
+
+    result = asyncio.run(catalog_common.safe_callback_answer(FakeCallback()))
+
+    assert result is True
+    assert calls["text"] is None
+    assert calls["request_timeout"] == catalog_common.CALLBACK_ACK_TIMEOUT_SECONDS
+
+
+def test_safe_callback_answer_ignores_network_errors():
+    class FakeCallback:
+        data = "cat_1"
+        from_user = type("User", (), {"id": 7})()
+
+        async def answer(self, **kwargs):
+            raise TelegramNetworkError(
+                method=SendMessage(chat_id=1, text="test"),
+                message="timeout",
+            )
+
+    result = asyncio.run(catalog_common.safe_callback_answer(FakeCallback()))
+
+    assert result is False

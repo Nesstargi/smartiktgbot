@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from aiogram import Router
+from aiogram.exceptions import TelegramNetworkError, TelegramServerError
 from aiogram.types import (
     BufferedInputFile,
     CallbackQuery,
@@ -71,6 +72,7 @@ MEDIA_ROOT = Path(__file__).resolve().parents[2] / "backend" / "media"
 MEDIA_CACHE_PATH = Path(__file__).resolve().parents[1] / "cache" / "media_file_ids.json"
 TELEGRAM_IMAGE_MAX_SIZE = 1600
 TELEGRAM_JPEG_QUALITY = 85
+CALLBACK_ACK_TIMEOUT_SECONDS = float(os.getenv("BOT_CALLBACK_ACK_TIMEOUT_SECONDS", "3").strip() or "3")
 
 
 def _load_media_file_id_cache() -> dict[str, str]:
@@ -818,6 +820,26 @@ async def send_photo_with_fallback(
             except Exception:
                 return None
         return None
+
+
+async def safe_callback_answer(callback: CallbackQuery, text: str | None = None) -> bool:
+    try:
+        await callback.answer(
+            text=text,
+            request_timeout=CALLBACK_ACK_TIMEOUT_SECONDS,
+        )
+        return True
+    except (TelegramNetworkError, TelegramServerError) as exc:
+        logger.warning(
+            "Callback ack failed for user_id=%s data=%s: %s",
+            getattr(callback.from_user, "id", None),
+            callback.data,
+            exc,
+        )
+        return False
+    except Exception:
+        logger.debug("Unexpected callback ack failure for %s", callback.data, exc_info=True)
+        return False
 
 
 async def safe_delete_message(message: Message | None):
