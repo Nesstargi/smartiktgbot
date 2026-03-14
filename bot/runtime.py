@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import logging
 import os
+import socket
 from pathlib import Path
 from typing import Any
 
 from aiogram import Bot, Dispatcher
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.types import Update
 from dotenv import load_dotenv
 
@@ -34,6 +36,18 @@ TELEGRAM_WEBHOOK_DROP_PENDING_UPDATES = os.getenv(
     "TELEGRAM_WEBHOOK_DROP_PENDING_UPDATES",
     "false",
 ).strip().lower() in {"1", "true", "yes", "on"}
+TELEGRAM_BOT_REQUEST_TIMEOUT_SECONDS = float(
+    os.getenv("TELEGRAM_BOT_REQUEST_TIMEOUT_SECONDS", "20").strip() or "20"
+)
+TELEGRAM_BOT_CONNECTOR_LIMIT = int(
+    os.getenv("TELEGRAM_BOT_CONNECTOR_LIMIT", "20").strip() or "20"
+)
+TELEGRAM_FORCE_IPV4 = os.getenv("TELEGRAM_FORCE_IPV4", "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 _bot: Bot | None = None
 _dispatcher: Dispatcher | None = None
@@ -78,12 +92,22 @@ def _build_dispatcher() -> Dispatcher:
     return dispatcher
 
 
+def _build_bot_session() -> AiohttpSession:
+    session = AiohttpSession(
+        timeout=TELEGRAM_BOT_REQUEST_TIMEOUT_SECONDS,
+        limit=TELEGRAM_BOT_CONNECTOR_LIMIT,
+    )
+    if TELEGRAM_FORCE_IPV4:
+        session._connector_init["family"] = socket.AF_INET
+    return session
+
+
 def get_bot_instance() -> Bot | None:
     global _bot
     if not has_bot_token():
         return None
     if _bot is None:
-        _bot = Bot(token=TOKEN)
+        _bot = Bot(token=TOKEN, session=_build_bot_session())
     return _bot
 
 

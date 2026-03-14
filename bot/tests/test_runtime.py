@@ -1,7 +1,40 @@
 import asyncio
+import socket
 from types import SimpleNamespace
 
 from bot import runtime
+
+
+def test_get_bot_instance_builds_bot_with_configured_session(monkeypatch):
+    captured = {}
+    fake_session = SimpleNamespace(_connector_init={})
+
+    def fake_session_factory(**kwargs):
+        captured["session_kwargs"] = kwargs
+        return fake_session
+
+    class FakeBot:
+        def __init__(self, token, session):
+            captured["token"] = token
+            captured["bot_session"] = session
+            self.session = SimpleNamespace()
+
+    monkeypatch.setattr(runtime, "TOKEN", "123:ABC")
+    monkeypatch.setattr(runtime, "_bot", None)
+    monkeypatch.setattr(runtime, "TELEGRAM_FORCE_IPV4", True)
+    monkeypatch.setattr(runtime, "TELEGRAM_BOT_REQUEST_TIMEOUT_SECONDS", 20.0)
+    monkeypatch.setattr(runtime, "TELEGRAM_BOT_CONNECTOR_LIMIT", 20)
+    monkeypatch.setattr(runtime, "AiohttpSession", fake_session_factory)
+    monkeypatch.setattr(runtime, "Bot", FakeBot)
+
+    bot = runtime.get_bot_instance()
+
+    assert bot is not None
+    assert captured["token"] == "123:ABC"
+    assert captured["bot_session"] is fake_session
+    assert captured["session_kwargs"]["timeout"] == 20.0
+    assert captured["session_kwargs"]["limit"] == 20
+    assert captured["bot_session"]._connector_init["family"] == socket.AF_INET
 
 
 def test_get_bot_instance_reuses_existing_bot_without_closed_attribute(monkeypatch):
