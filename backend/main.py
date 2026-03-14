@@ -1,7 +1,7 @@
 ﻿from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 
 from backend.api.admin import (
     auth_router,
@@ -42,6 +42,8 @@ def _ensure_sqlite_migrations():
         }
         if "image_url" not in promo_cols:
             conn.execute(text("ALTER TABLE promotions ADD COLUMN image_url VARCHAR"))
+        if "image_file_id" not in promo_cols:
+            conn.execute(text("ALTER TABLE promotions ADD COLUMN image_file_id VARCHAR"))
 
         sub_cols = {
             row[1]
@@ -104,6 +106,17 @@ def _ensure_sqlite_migrations():
             conn.execute(text("UPDATE leads SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"))
 
 
+def _ensure_promotion_file_id_column():
+    inspector = inspect(engine)
+    if "promotions" not in inspector.get_table_names():
+        return
+    columns = {col["name"] for col in inspector.get_columns("promotions")}
+    if "image_file_id" in columns:
+        return
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE promotions ADD COLUMN image_file_id VARCHAR"))
+
+
 def _bootstrap_super_admin_role():
     db = SessionLocal()
     try:
@@ -144,6 +157,7 @@ def _bootstrap_super_admin_role():
 
 if engine.url.get_backend_name() == "sqlite":
     _ensure_sqlite_migrations()
+_ensure_promotion_file_id_column()
 _bootstrap_super_admin_role()
 
 app = FastAPI(title="SmartIKTG Backend")

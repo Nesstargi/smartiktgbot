@@ -46,6 +46,7 @@ async def create_promotion(
             title=f"Новая акция: {item.title}",
             message=item.description or "Смотрите подробности в боте.",
             image_url=item.image_url,
+            image_file_id=item.image_file_id,
         )
 
     return item

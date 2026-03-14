@@ -3,7 +3,7 @@
 from aiogram import F
 from aiogram.types import Message
 
-from bot.api_client import get_promotions
+from bot.api_client import get_promotions, update_promotion_file_id
 
 from .catalog_common import (
     consultation_waiting_question,
@@ -27,7 +27,9 @@ async def show_promotions(message: Message):
     photo_tasks: list[asyncio.Task | None] = []
     for item in promotions:
         image_url = item.get("image_url")
-        photo_tasks.append(asyncio.create_task(photo_payload(image_url)) if image_url else None)
+        image_file_id = item.get("image_file_id")
+        image_ref = image_file_id or image_url
+        photo_tasks.append(asyncio.create_task(photo_payload(image_ref)) if image_ref else None)
 
     for item, task in zip(promotions, photo_tasks):
         title = item.get("title", "Без названия")
@@ -49,7 +51,15 @@ async def show_promotions(message: Message):
                         parse_mode="Markdown",
                     )
                     if sent:
-                        remember_sent_photo(item.get("image_url"), sent)
+                        image_url = item.get("image_url")
+                        if image_url:
+                            remember_sent_photo(image_url, sent)
+                        if not item.get("image_file_id"):
+                            photo_sizes = getattr(sent, "photo", None)
+                            if photo_sizes:
+                                file_id = photo_sizes[-1].file_id
+                                await update_promotion_file_id(item.get("id"), file_id)
+                                item["image_file_id"] = file_id
                         continue
 
                 sent = await send_photo_with_fallback(
@@ -60,7 +70,15 @@ async def show_promotions(message: Message):
                     parse_mode="Markdown",
                 )
                 if sent:
-                    remember_sent_photo(item.get("image_url"), sent)
+                    image_url = item.get("image_url")
+                    if image_url:
+                        remember_sent_photo(image_url, sent)
+                    if not item.get("image_file_id"):
+                        photo_sizes = getattr(sent, "photo", None)
+                        if photo_sizes:
+                            file_id = photo_sizes[-1].file_id
+                            await update_promotion_file_id(item.get("id"), file_id)
+                            item["image_file_id"] = file_id
                     await message.answer(text, parse_mode="Markdown")
                     continue
             except Exception:

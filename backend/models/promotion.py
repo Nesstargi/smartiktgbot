@@ -10,4 +10,5 @@ class Promotion(Base):
     title = Column(String, nullable=False)
     description = Column(String, nullable=True)
     image_url = Column(String, nullable=True)
+    image_file_id = Column(String, nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)

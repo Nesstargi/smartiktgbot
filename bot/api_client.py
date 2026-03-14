@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 API_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
+BOT_API_TOKEN = os.getenv("BOT_API_TOKEN", "")
 
 _session: aiohttp.ClientSession | None = None
 _cache: dict[str, tuple[float, object]] = {}
@@ -94,6 +95,26 @@ async def get_products(sub_id: int):
 
 async def get_promotions():
     return await _get("/api/promotions", cache_seconds=30)
+
+
+async def update_promotion_file_id(promotion_id: int, image_file_id: str):
+    if not promotion_id or not image_file_id:
+        return None
+
+    session = await _get_session()
+    headers = {"X-Bot-Token": BOT_API_TOKEN} if BOT_API_TOKEN else None
+    payload = {"image_file_id": image_file_id}
+    try:
+        async with session.post(
+            _url(f"/api/promotions/{promotion_id}/file-id"),
+            json=payload,
+            headers=headers,
+        ) as resp:
+            if resp.status >= 400:
+                return None
+            return await resp.json()
+    except Exception:
+        return None
 
 
 async def get_bot_settings():

@@ -13,6 +13,7 @@ if not SECRET_KEY:
 ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+BOT_API_TOKEN = os.getenv("BOT_API_TOKEN", "")
 
 
 def _parse_origins(raw: str) -> list[str]:

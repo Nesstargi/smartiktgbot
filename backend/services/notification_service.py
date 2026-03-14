@@ -43,6 +43,7 @@ class NotificationService:
         title: str,
         message: str,
         image_url: str | None = None,
+        image_file_id: str | None = None,
     ):
         token = TELEGRAM_BOT_TOKEN
         if not token:
@@ -70,7 +71,19 @@ class NotificationService:
         async with aiohttp.ClientSession(timeout=timeout) as session:
             for chat_id in unique_chat_ids:
                 try:
-                    if image_url:
+                    if image_file_id:
+                        payload = {
+                            "chat_id": chat_id,
+                            "photo": image_file_id,
+                            "caption": text,
+                            "parse_mode": "Markdown",
+                        }
+                        async with session.post(f"{base_url}/sendPhoto", json=payload) as resp:
+                            if resp.status == 200:
+                                success += 1
+                            else:
+                                failed += 1
+                    elif image_url:
                         if local_image_path:
                             data = aiohttp.FormData()
                             data.add_field("chat_id", chat_id)
