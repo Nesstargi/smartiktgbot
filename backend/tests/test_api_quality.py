@@ -3,6 +3,7 @@ from backend.core.deps import (
     PERMISSION_MANAGE_PRODUCTS,
     PERMISSION_MANAGE_SUBCATEGORIES,
 )
+from backend.models.bot_subscriber import BotSubscriber
 
 
 def test_public_subcategories_returns_404_for_missing_category(client):
@@ -155,6 +156,7 @@ def test_dashboard_stats_returns_typed_counts(
     create_user,
     create_catalog,
     auth_headers,
+    db_session,
 ):
     admin = create_user(
         email="dashboard-admin@example.com",
@@ -162,6 +164,8 @@ def test_dashboard_stats_returns_typed_counts(
         roles=["admin"],
     )
     create_catalog()
+    db_session.add(BotSubscriber(chat_id="1001", telegram_user_id="1001"))
+    db_session.commit()
     headers = auth_headers(admin["email"], admin["password"])
 
     response = client.get("/admin/dashboard/stats", headers=headers)
@@ -173,4 +177,5 @@ def test_dashboard_stats_returns_typed_counts(
         "subcategories": 1,
         "promotions": 0,
         "leads": 0,
+        "bot_users": 1,
     }

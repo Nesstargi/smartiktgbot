@@ -36,7 +36,7 @@
       postgres:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./backend/media:/app/backend/media
     restart: unless-stopped
@@ -62,8 +62,11 @@
       context: ./admin-panel
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+        VITE_API_URL: ${VITE_API_URL:-/}
     container_name: smartiktg-admin
+    depends_on:
+      backend:
+        condition: service_started
     ports:
       - "5173:80"
     restart: unless-stopped

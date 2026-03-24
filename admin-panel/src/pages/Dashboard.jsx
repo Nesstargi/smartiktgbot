@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { getApiErrorMessage } from "../api/axios";
 import { getStats } from "../api/dashboard.api";
@@ -9,6 +9,7 @@ const primaryItems = [
   { key: "products", label: "Товары", hint: "Позиции, доступные в каталоге" },
   { key: "promotions", label: "Акции", hint: "Маркетинговые предложения" },
   { key: "leads", label: "Заявки", hint: "Контакты и запросы клиентов" },
+  { key: "bot_users", label: "Пользователи бота", hint: "Все пользователи, попавшие в аудиторию рассылки" },
 ];
 
 function formatDateTime(value) {
@@ -23,30 +24,6 @@ function formatDateTime(value) {
   });
 }
 
-function buildInsights(stats) {
-  const insights = [];
-
-  if (stats.products === 0) {
-    insights.push("В каталоге пока нет товаров. Пользователю будет нечего показывать в карточках.");
-  } else {
-    insights.push(`Каталог уже наполнен: ${stats.products} товаров доступны для работы бота и админки.`);
-  }
-
-  if (stats.leads === 0) {
-    insights.push("Заявок пока нет. Можно проверить сценарии бота и форму захвата лидов.");
-  } else {
-    insights.push(`В базе ${stats.leads} заявок. Есть с чем работать менеджеру и аналитике.`);
-  }
-
-  if (stats.promotions === 0) {
-    insights.push("Акций пока нет. Рассылки и промо-блок можно усилить первой кампанией.");
-  } else {
-    insights.push(`Акционные сценарии уже используются: заведено ${stats.promotions} акций.`);
-  }
-
-  return insights;
-}
-
 export default function Dashboard() {
   const [stats, setStats] = useState({
     categories: 0,
@@ -54,21 +31,12 @@ export default function Dashboard() {
     products: 0,
     promotions: 0,
     leads: 0,
+    bot_users: 0,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
-
-  const catalogTotal = useMemo(
-    () => stats.categories + stats.subcategories + stats.products,
-    [stats.categories, stats.products, stats.subcategories],
-  );
-  const marketingTotal = useMemo(
-    () => stats.promotions + stats.leads,
-    [stats.leads, stats.promotions],
-  );
-  const insights = useMemo(() => buildInsights(stats), [stats]);
 
   const loadStats = async ({ silent = false } = {}) => {
     if (silent) {
@@ -114,38 +82,15 @@ export default function Dashboard() {
       {loading ? (
         <p className="muted">Загрузка дашборда...</p>
       ) : (
-        <>
-          <div className="stats-grid">
-            {primaryItems.map((item) => (
-              <article className="card metric-card" key={item.key}>
-                <p className="muted">{item.label}</p>
-                <strong className="stat-value">{stats[item.key] ?? 0}</strong>
-                <p className="metric-caption">{item.hint}</p>
-              </article>
-            ))}
-          </div>
-
-          <div className="stats-summary-grid">
-            <article className="card">
-              <h3>Сводка каталога</h3>
-              <p className="stat-value">{catalogTotal}</p>
-              <p className="muted">Категории, подкатегории и товары вместе.</p>
+        <div className="stats-grid">
+          {primaryItems.map((item) => (
+            <article className="card metric-card" key={item.key}>
+              <p className="muted">{item.label}</p>
+              <strong className="stat-value">{stats[item.key] ?? 0}</strong>
+              <p className="metric-caption">{item.hint}</p>
             </article>
-            <article className="card">
-              <h3>Рабочая нагрузка</h3>
-              <p className="stat-value">{marketingTotal}</p>
-              <p className="muted">Суммарно акции и заявки, с которыми работает команда.</p>
-            </article>
-          </div>
-
-          <div className="insights-grid">
-            {insights.map((insight) => (
-              <article className="card insight-card" key={insight}>
-                <p>{insight}</p>
-              </article>
-            ))}
-          </div>
-        </>
+          ))}
+        </div>
       )}
     </section>
   );

@@ -29,6 +29,7 @@ from bot.api_client import (
     get_categories,
     get_products,
     get_subcategories,
+    register_bot_subscriber,
 )
 from bot.runtime_store import runtime_store
 
@@ -219,7 +220,7 @@ async def get_categories_cached(force_refresh: bool = False):
             _populate_categories_cache(cached)
             return cached
 
-    categories = await get_categories()
+    categories = await get_categories(force_refresh=force_refresh)
     _category_lists_cache_set(categories)
     _populate_categories_cache(categories)
     await runtime_store.set_json(_categories_cache_key(), categories, CATALOG_CACHE_TTL_SECONDS)
@@ -238,7 +239,7 @@ async def get_subcategories_cached(cat_id: int, force_refresh: bool = False):
             _populate_subcategories_cache(cached)
             return cached
 
-    subcategories = await get_subcategories(cat_id)
+    subcategories = await get_subcategories(cat_id, force_refresh=force_refresh)
     _subcategory_lists_cache_set(cat_id, subcategories)
     _populate_subcategories_cache(subcategories)
     await runtime_store.set_json(
@@ -309,15 +310,17 @@ async def shutdown_background_tasks():
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
-async def get_products_cached(sub_id: int):
-    cached = _products_cache_get(sub_id)
-    if cached is not None:
-        return cached
-    cached = await runtime_store.get_json(_products_cache_key(sub_id))
-    if isinstance(cached, list):
-        _products_cache_set(sub_id, cached)
-        return cached
-    products = await get_products(sub_id)
+async def get_products_cached(sub_id: int, force_refresh: bool = False):
+    if not force_refresh:
+        cached = _products_cache_get(sub_id)
+        if cached is not None:
+            return cached
+        cached = await runtime_store.get_json(_products_cache_key(sub_id))
+        if isinstance(cached, list):
+            _products_cache_set(sub_id, cached)
+            return cached
+
+    products = await get_products(sub_id, force_refresh=force_refresh)
     _products_cache_set(sub_id, products)
     await runtime_store.set_json(_products_cache_key(sub_id), products, PRODUCTS_CACHE_TTL_SECONDS)
     return products
@@ -429,6 +432,35 @@ def is_local_url(url: str) -> bool:
 
 def media_cache_key(photo_ref: str | None) -> str | None:
     return full_media_url(photo_ref)
+
+
+async def sync_bot_subscriber(chat, user):
+    if not chat or not user:
+        return False
+
+    chat_type = getattr(chat, "type", None)
+    if str(chat_type) != "private":
+        return False
+
+    payload = {
+        "chat_id": chat.id,
+        "telegram_user_id": user.id,
+        "username": getattr(user, "username", None),
+        "full_name": getattr(user, "full_name", None),
+    }
+
+    try:
+        return await register_bot_subscriber(payload)
+    except Exception:
+        logger.debug("Bot subscriber sync failed for chat_id=%s", getattr(chat, "id", None), exc_info=True)
+        return False
+
+
+def schedule_bot_subscriber_sync(*, chat, user):
+    try:
+        asyncio.create_task(sync_bot_subscriber(chat, user))
+    except RuntimeError:
+        logger.debug("Bot subscriber sync skipped: no running event loop")
 
 
 async def get_lead_request(user_id: int) -> dict | None:
@@ -852,7 +884,9 @@ async def safe_delete_message(message: Message | None):
 
 
 async def send_subcategories_menu(callback: CallbackQuery, cat_id: int):
-    subcategories = await get_subcategories_cached(cat_id)
+    # Admin-side catalog changes should appear in the bot immediately,
+    # so we refresh the visible subcategory list on open instead of waiting for cache expiry.
+    subcategories = await get_subcategories_cached(cat_id, force_refresh=True)
 
     category_name = categories_cache.get(cat_id, f"Категория {cat_id}")
 
@@ -873,7 +907,7 @@ async def send_products_menu(callback: CallbackQuery, sub_id: int):
     sub = subcategories_cache.get(sub_id, {})
     sub_image = sub.get("image_url")
 
-    products_task = asyncio.create_task(get_products_cached(sub_id))
+    products_task = asyncio.create_task(get_products_cached(sub_id, force_refresh=True))
     photo_task = asyncio.create_task(photo_payload(sub_image)) if sub_image else None
 
     products = await products_task

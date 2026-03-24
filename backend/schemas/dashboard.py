@@ -7,3 +7,4 @@ class DashboardStatsOut(BaseModel):
     subcategories: int = Field(ge=0)
     promotions: int = Field(ge=0)
     leads: int = Field(ge=0)
+    bot_users: int = Field(ge=0)

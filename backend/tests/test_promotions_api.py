@@ -1,4 +1,5 @@
 from backend.core.deps import PERMISSION_MANAGE_PROMOTIONS
+from backend.models.bot_subscriber import BotSubscriber
 from backend.models.promotion import Promotion
 from backend.services.notification_service import NotificationService
 
@@ -105,6 +106,7 @@ def test_promotion_send_to_all_creates_item_and_broadcasts(
 
     db_session.add_all(
         [
+            BotSubscriber(chat_id="333", telegram_user_id="333"),
             Lead(phone="+10000000001", telegram_id="111"),
             Lead(phone="+10000000002", telegram_id="111"),
             Lead(phone="+10000000003", telegram_id="222"),
@@ -147,7 +149,7 @@ def test_promotion_send_to_all_creates_item_and_broadcasts(
 
     assert response.status_code == 200
     assert response.json()["title"] == "Weekend Promo"
-    assert set(captured["chat_ids"]) == {"111", "222"}
+    assert set(captured["chat_ids"]) == {"111", "222", "333"}
     assert captured["title"] == "Новая акция: Weekend Promo"
     assert captured["message"] == "Big discount"
     assert captured["image_url"] == "/media/banner.jpg"

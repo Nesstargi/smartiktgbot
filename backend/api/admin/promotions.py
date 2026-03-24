@@ -5,24 +5,14 @@ from sqlalchemy.orm import Session
 from backend.api.utils import normalize_search_query, paginate_query
 from backend.core.deps import PERMISSION_MANAGE_PROMOTIONS, require_permission
 from backend.database import get_db
-from backend.models.lead import Lead
 from backend.models.promotion import Promotion
 from backend.schemas.common import StatusOut
 from backend.schemas.promotion import PromotionCreate, PromotionOut, PromotionUpdate
+from backend.services.bot_subscriber_service import BotSubscriberService
 from backend.services.notification_service import NotificationService
 from backend.services.promotion_service import PromotionService
 
 router = APIRouter()
-
-
-def _broadcast_chat_ids(db: Session) -> list[str]:
-    rows = (
-        db.query(Lead.telegram_id)
-        .filter(Lead.telegram_id.isnot(None))
-        .distinct()
-        .all()
-    )
-    return [row[0] for row in rows if row[0]]
 
 
 @router.get("/", response_model=list[PromotionOut])
@@ -72,7 +62,7 @@ async def create_promotion(
 
     if data.send_to_all:
         await NotificationService.send_broadcast(
-            chat_ids=_broadcast_chat_ids(db),
+            chat_ids=BotSubscriberService.broadcast_chat_ids(db),
             title=f"Новая акция: {item.title}",
             message=item.description or "Смотрите подробности в боте.",
             image_url=item.image_url,

@@ -11,6 +11,7 @@ from .catalog_common import (
     get_products_cached,
     lead_contact_keyboard,
     router,
+    schedule_bot_subscriber_sync,
     safe_callback_answer,
     schedule_catalog_warmup,
     send_product_card,
@@ -24,11 +25,12 @@ from .catalog_common import (
 @router.message(F.text == "🛒 Каталог")
 async def show_categories(message: Message):
     if message.from_user:
+        schedule_bot_subscriber_sync(chat=message.chat, user=message.from_user)
         await clear_consultation_waiting(message.from_user.id)
         await touch_catalog_activity(message.from_user.id, message.bot, message.chat.id)
 
-    categories = await get_categories_cached()
-    schedule_catalog_warmup()
+    categories = await get_categories_cached(force_refresh=True)
+    schedule_catalog_warmup(force_refresh=True)
 
     kb = [[InlineKeyboardButton(text=cat["name"], callback_data=f"cat_{cat['id']}")] for cat in categories]
     kb.append([InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")])
@@ -37,6 +39,8 @@ async def show_categories(message: Message):
 
 @router.callback_query(F.data.startswith("cat_"))
 async def show_subcategories(callback: CallbackQuery):
+    if callback.from_user and callback.message:
+        schedule_bot_subscriber_sync(chat=callback.message.chat, user=callback.from_user)
     await safe_callback_answer(callback)
     cat_id = int(callback.data.split("_")[1])
     await touch_catalog_activity(callback.from_user.id, callback.bot, callback.message.chat.id)
@@ -45,6 +49,8 @@ async def show_subcategories(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("sub_"))
 async def show_products(callback: CallbackQuery):
+    if callback.from_user and callback.message:
+        schedule_bot_subscriber_sync(chat=callback.message.chat, user=callback.from_user)
     await safe_callback_answer(callback)
     sub_id = int(callback.data.split("_")[1])
     await touch_catalog_activity(callback.from_user.id, callback.bot, callback.message.chat.id, sub_id=sub_id)
@@ -53,6 +59,8 @@ async def show_products(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("prod_"))
 async def show_product_card(callback: CallbackQuery):
+    if callback.from_user and callback.message:
+        schedule_bot_subscriber_sync(chat=callback.message.chat, user=callback.from_user)
     await safe_callback_answer(callback)
     _, sub_id, product_id = callback.data.split("_")
     await touch_catalog_activity(
@@ -67,6 +75,8 @@ async def show_product_card(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("lead_"))
 async def lead_start(callback: CallbackQuery):
+    if callback.from_user and callback.message:
+        schedule_bot_subscriber_sync(chat=callback.message.chat, user=callback.from_user)
     await safe_callback_answer(callback)
     _, sub_id, product_id = callback.data.split("_")
     sub_id_i = int(sub_id)
@@ -102,6 +112,8 @@ async def lead_start(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("back_subs_"))
 async def back_to_subs(callback: CallbackQuery):
+    if callback.from_user and callback.message:
+        schedule_bot_subscriber_sync(chat=callback.message.chat, user=callback.from_user)
     await safe_callback_answer(callback)
     cat_id = int(callback.data.split("_")[2])
     await touch_catalog_activity(callback.from_user.id, callback.bot, callback.message.chat.id)
@@ -110,6 +122,8 @@ async def back_to_subs(callback: CallbackQuery):
 
 @router.callback_query(F.data == "main_menu")
 async def back_to_main(callback: CallbackQuery):
+    if callback.from_user and callback.message:
+        schedule_bot_subscriber_sync(chat=callback.message.chat, user=callback.from_user)
     await safe_callback_answer(callback)
     await touch_catalog_activity(callback.from_user.id, callback.bot, callback.message.chat.id)
     await clear_consultation_waiting(callback.from_user.id)
@@ -118,6 +132,8 @@ async def back_to_main(callback: CallbackQuery):
 
 @router.callback_query(F.data == "back_categories")
 async def back_categories(callback: CallbackQuery):
+    if callback.from_user and callback.message:
+        schedule_bot_subscriber_sync(chat=callback.message.chat, user=callback.from_user)
     await safe_callback_answer(callback)
     await touch_catalog_activity(callback.from_user.id, callback.bot, callback.message.chat.id)
     await show_categories(callback.message)

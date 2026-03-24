@@ -1,9 +1,9 @@
-﻿from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from backend.core.deps import require_role
 from backend.database import get_db
-from backend.models import Category, Lead, Product, Promotion, SubCategory
+from backend.models import BotSubscriber, Category, Lead, Product, Promotion, SubCategory
 from backend.schemas.dashboard import DashboardStatsOut
 
 router = APIRouter()
@@ -20,4 +20,5 @@ def get_stats(
         "subcategories": db.query(SubCategory).count(),
         "promotions": db.query(Promotion).count(),
         "leads": db.query(Lead).count(),
+        "bot_users": db.query(BotSubscriber).count(),
     }

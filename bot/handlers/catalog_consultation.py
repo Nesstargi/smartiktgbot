@@ -22,6 +22,7 @@ from .catalog_common import (
     pop_lead_request,
     pop_reminder_reply_context,
     router,
+    schedule_bot_subscriber_sync,
     set_consultation_waiting,
     set_lead_request,
 )
@@ -55,6 +56,7 @@ async def accept_reminder_response(message: Message, context: dict):
     user = message.from_user
     if not user:
         return
+    schedule_bot_subscriber_sync(chat=message.chat, user=user)
 
     await set_lead_request(
         user.id,
@@ -108,6 +110,7 @@ async def start_consultation(message: Message):
     if not message.from_user:
         return
 
+    schedule_bot_subscriber_sync(chat=message.chat, user=message.from_user)
     user_id = message.from_user.id
     await asyncio.gather(
         clear_reminder_reply_context(user_id),
@@ -115,7 +118,7 @@ async def start_consultation(message: Message):
     )
 
     try:
-        settings = await get_bot_settings()
+        settings = await get_bot_settings(force_refresh=True)
     except Exception:
         settings = {}
 
@@ -133,10 +136,11 @@ async def start_consultation(message: Message):
 @router.message(F.text == "ℹ️ О компании")
 async def show_about(message: Message):
     if message.from_user:
+        schedule_bot_subscriber_sync(chat=message.chat, user=message.from_user)
         await clear_consultation_waiting(message.from_user.id)
 
     try:
-        settings = await get_bot_settings()
+        settings = await get_bot_settings(force_refresh=True)
     except Exception:
         settings = {}
 
@@ -149,6 +153,7 @@ async def reminder_reply(message: Message):
     user = message.from_user
     if not user:
         return
+    schedule_bot_subscriber_sync(chat=message.chat, user=user)
 
     context = await get_reminder_reply_context(user.id)
     if not context:
@@ -166,6 +171,7 @@ async def cancel_lead(message: Message):
     if not message.from_user:
         return
 
+    schedule_bot_subscriber_sync(chat=message.chat, user=message.from_user)
     user_id = message.from_user.id
     context = await pop_lead_request(user_id)
     await asyncio.gather(
@@ -192,6 +198,7 @@ async def cancel_lead(message: Message):
 @router.message(F.text == "🏠 Главное меню")
 async def back_to_main_from_keyboard(message: Message):
     if message.from_user:
+        schedule_bot_subscriber_sync(chat=message.chat, user=message.from_user)
         await clear_consultation_waiting(message.from_user.id)
     await message.answer("🏠 Главное меню\n\nВыберите пункт меню 👇", reply_markup=menu)
 
@@ -201,6 +208,7 @@ async def reminder_reply_fallback(message: Message):
     user = message.from_user
     if not user:
         return
+    schedule_bot_subscriber_sync(chat=message.chat, user=user)
 
     if is_menu_text(message.text):
         return
@@ -221,7 +229,7 @@ async def reminder_reply_fallback(message: Message):
         )
 
         try:
-            settings = await get_bot_settings()
+            settings = await get_bot_settings(force_refresh=True)
             contact_prompt = settings.get("consultation_contact_prompt") or DEFAULT_CONSULTATION_CONTACT_PROMPT
         except Exception:
             contact_prompt = DEFAULT_CONSULTATION_CONTACT_PROMPT
@@ -241,6 +249,7 @@ async def handle_contact(message: Message):
     if not message.from_user:
         return
 
+    schedule_bot_subscriber_sync(chat=message.chat, user=message.from_user)
     phone = message.contact.phone_number
     user_id = message.from_user.id
     name = message.from_user.full_name

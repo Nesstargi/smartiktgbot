@@ -1,4 +1,5 @@
-﻿from .bot_setting import BotSetting
+from .bot_setting import BotSetting
+from .bot_subscriber import BotSubscriber
 from .category import Category
 from .lead import Lead
 from .product import Product

@@ -32,6 +32,7 @@ from backend.core.security import hash_password
 from backend.database import SessionLocal, engine
 from backend.main import app
 from backend.models.bot_setting import BotSetting
+from backend.models.bot_subscriber import BotSubscriber
 from backend.models.category import Category
 from backend.models.lead import Lead
 from backend.models.product import Product
@@ -70,6 +71,7 @@ def reset_test_state(migrated_db):
         for model in (
             UserPermission,
             UserRole,
+            BotSubscriber,
             Product,
             SubCategory,
             Category,

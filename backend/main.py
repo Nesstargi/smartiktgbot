@@ -23,6 +23,7 @@ from backend.api.admin import (
     users_router,
 )
 from backend.api.public import (
+    bot_subscribers_router,
     bot_settings_router,
     categories_router,
     leads_router,
@@ -83,6 +84,7 @@ app.include_router(products_router, prefix="/api", tags=["products"])
 app.include_router(leads_router, prefix="/api", tags=["leads"])
 app.include_router(promotions_router, prefix="/api", tags=["promotions"])
 app.include_router(bot_settings_router, prefix="/api", tags=["bot-settings"])
+app.include_router(bot_subscribers_router, prefix="/api", tags=["bot-subscribers"])
 app.include_router(telegram_router, tags=["telegram"])
 
 # Admin API

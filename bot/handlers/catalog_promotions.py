@@ -10,6 +10,7 @@ from .catalog_common import (
     photo_payload,
     remember_sent_photo,
     router,
+    schedule_bot_subscriber_sync,
     send_photo_with_fallback,
 )
 
@@ -17,8 +18,9 @@ from .catalog_common import (
 @router.message(F.text == "🔥 Акции")
 async def show_promotions(message: Message):
     if message.from_user:
+        schedule_bot_subscriber_sync(chat=message.chat, user=message.from_user)
         await clear_consultation_waiting(message.from_user.id)
-    promotions = await get_promotions()
+    promotions = await get_promotions(force_refresh=True)
     if not promotions:
         await message.answer("Сейчас активных акций нет.")
         return

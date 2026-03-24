@@ -1,4 +1,5 @@
 from backend.core.deps import PERMISSION_MANAGE_NOTIFICATIONS
+from backend.models.bot_subscriber import BotSubscriber
 from backend.models.lead import Lead
 from backend.services.notification_service import NotificationService
 
@@ -21,7 +22,7 @@ def test_notifications_require_permission(client, create_user, auth_headers):
     assert response.json()["detail"] == "Insufficient permissions"
 
 
-def test_notifications_broadcast_uses_distinct_non_empty_chat_ids(
+def test_notifications_broadcast_uses_union_of_subscribers_and_leads(
     client,
     create_user,
     auth_headers,
@@ -38,6 +39,8 @@ def test_notifications_broadcast_uses_distinct_non_empty_chat_ids(
 
     db_session.add_all(
         [
+            BotSubscriber(chat_id="900", telegram_user_id="900"),
+            BotSubscriber(chat_id="456", telegram_user_id="456"),
             Lead(phone="+10000000001", telegram_id="123"),
             Lead(phone="+10000000002", telegram_id="123"),
             Lead(phone="+10000000003", telegram_id="456"),
@@ -74,8 +77,8 @@ def test_notifications_broadcast_uses_distinct_non_empty_chat_ids(
     )
 
     assert response.status_code == 200
-    assert response.json() == {"total": 2, "success": 2, "failed": 0}
-    assert set(captured["chat_ids"]) == {"123", "456"}
+    assert response.json() == {"total": 3, "success": 3, "failed": 0}
+    assert set(captured["chat_ids"]) == {"123", "456", "900"}
     assert captured["title"] == "New promo"
     assert captured["message"] == "Check this out"
     assert captured["image_url"] == "/media/banner.jpg"

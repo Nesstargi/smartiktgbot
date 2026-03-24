@@ -74,3 +74,4 @@ The public HTTPS URL exposed to Telegram becomes `TELEGRAM_WEBHOOK_BASE_URL + TE
 - `backend/main.py` no longer creates or alters tables automatically on import.
 - `backend/media/` is kept in the repository as an empty runtime directory placeholder.
 - The bot uses Redis for shared cache and dialog state when `REDIS_URL` is set; if Redis is unavailable, it falls back to local in-memory cache.
+- Bot broadcasts now target the combined audience of known bot subscribers and leads with `telegram_id`. Users are added to the audience automatically after they interact with the bot.

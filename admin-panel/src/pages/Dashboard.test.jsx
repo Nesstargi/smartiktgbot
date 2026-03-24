@@ -20,6 +20,7 @@ describe("Dashboard", () => {
         products: 12,
         promotions: 1,
         leads: 4,
+        bot_users: 9,
       })
       .mockResolvedValueOnce({
         categories: 3,
@@ -27,11 +28,13 @@ describe("Dashboard", () => {
         products: 14,
         promotions: 2,
         leads: 7,
+        bot_users: 11,
       });
 
     render(<Dashboard />);
 
     expect(await screen.findByText("12")).toBeInTheDocument();
+    expect(screen.getByText("Пользователи бота")).toBeInTheDocument();
     expect(screen.getByText("Сводка по текущему состоянию каталога, акций и входящих заявок.")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Обновить" }));

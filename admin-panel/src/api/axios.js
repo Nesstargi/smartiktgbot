@@ -1,7 +1,39 @@
 import axios from "axios";
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1"]);
+const LOCAL_API_HOSTS = new Set(["localhost", "127.0.0.1", "backend"]);
+
+function resolveBaseUrl() {
+  const configuredBaseUrl = import.meta.env.VITE_API_URL?.trim();
+  if (!configuredBaseUrl) {
+    return "";
+  }
+
+  if (typeof window === "undefined") {
+    return configuredBaseUrl;
+  }
+
+  try {
+    const parsedUrl = new URL(configuredBaseUrl, window.location.origin);
+    const currentHost = window.location.hostname.toLowerCase();
+    const configuredHost = parsedUrl.hostname.toLowerCase();
+
+    if (
+      LOCAL_API_HOSTS.has(configuredHost) &&
+      !LOOPBACK_HOSTS.has(currentHost) &&
+      configuredHost !== currentHost
+    ) {
+      return "";
+    }
+  } catch {
+    return configuredBaseUrl;
+  }
+
+  return configuredBaseUrl;
+}
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000",
+  baseURL: resolveBaseUrl(),
 });
 
 api.interceptors.request.use((config) => {
