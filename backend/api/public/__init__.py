@@ -1,3 +1,4 @@
+from .bot_admin import router as bot_admin_router
 from .bot_subscribers import router as bot_subscribers_router
 from .bot_settings import router as bot_settings_router
 from .categories import router as categories_router

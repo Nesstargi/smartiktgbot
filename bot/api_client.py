@@ -146,6 +146,16 @@ async def get_bot_settings(force_refresh: bool = False):
     return await _get("/api/bot-settings", cache_seconds=20, force_refresh=force_refresh)
 
 
+async def get_bot_admin_overview(limit: int = 10):
+    session = await _get_session()
+    async with session.get(
+        _url(f"/api/bot-admin/overview?limit={int(limit)}"),
+        headers=_bot_headers(),
+    ) as resp:
+        resp.raise_for_status()
+        return await resp.json()
+
+
 async def create_lead(payload: dict):
     session = await _get_session()
     async with session.post(_url("/api/leads"), json=payload) as resp:

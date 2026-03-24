@@ -202,3 +202,39 @@ def test_get_bot_settings_force_refresh_bypasses_cached_json(monkeypatch):
     assert calls["get_json"] == 0
     assert calls["http"] == 1
     assert calls["set_json"] == 1
+
+
+def test_get_bot_admin_overview_uses_bot_headers(monkeypatch):
+    captured = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        async def json(self):
+            return {"bot_users": 9, "leads_total": 3, "recent_leads": []}
+
+    class FakeRequestContext:
+        async def __aenter__(self):
+            return FakeResponse()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeSession:
+        def get(self, url, headers=None):
+            captured["url"] = url
+            captured["headers"] = headers
+            return FakeRequestContext()
+
+    async def fake_get_session():
+        return FakeSession()
+
+    monkeypatch.setattr(api_client, "_get_session", fake_get_session)
+    monkeypatch.setattr(api_client, "BOT_API_TOKEN", "secret-token")
+
+    result = asyncio.run(api_client.get_bot_admin_overview(limit=5))
+
+    assert result == {"bot_users": 9, "leads_total": 3, "recent_leads": []}
+    assert captured["url"].endswith("/api/bot-admin/overview?limit=5")
+    assert captured["headers"] == {"X-Bot-Token": "secret-token"}
