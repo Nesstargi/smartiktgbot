@@ -19,6 +19,7 @@ import {
   getAllSubcategories,
   updateSubcategory,
 } from "../api/subcategories.api";
+import TextAssistField from "../components/TextAssistField";
 import UploadField from "../components/UploadField";
 import { buildMediaUrl } from "../utils/media";
 
@@ -36,6 +37,32 @@ function getResultsLabel(itemsLength, total, page, pageSize) {
   const start = page * pageSize + 1;
   const end = page * pageSize + itemsLength;
   return `Показано ${start}-${end} из ${total}`;
+}
+
+function EditorDialog({ title, onClose, onSubmit, submitLabel, children }) {
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <div className="dialog-card" role="dialog" aria-modal="true" aria-label={title}>
+        <div className="dialog-header">
+          <h4>{title}</h4>
+          <button type="button" onClick={onClose}>
+            Закрыть
+          </button>
+        </div>
+
+        <form className="stack-form" onSubmit={onSubmit}>
+          {children}
+
+          <div className="dialog-actions">
+            <button type="button" onClick={onClose}>
+              Отмена
+            </button>
+            <button type="submit">{submitLabel}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }
 
 export default function CatalogPage() {
@@ -74,6 +101,9 @@ export default function CatalogPage() {
     subcategory_id: "",
     image_file_id: "",
   });
+  const [categoryEditForm, setCategoryEditForm] = useState(null);
+  const [subcategoryEditForm, setSubcategoryEditForm] = useState(null);
+  const [productEditForm, setProductEditForm] = useState(null);
   const [productSearchInput, setProductSearchInput] = useState("");
   const [productSearchQuery, setProductSearchQuery] = useState("");
   const [productFilterSubcategoryId, setProductFilterSubcategoryId] = useState(
@@ -350,16 +380,7 @@ export default function CatalogPage() {
   };
 
   const onRenameCategory = async (item) => {
-    const name = window.prompt("Новое имя категории", item.name);
-    if (!name || name === item.name) return;
-
-    setCategoryError("");
-    try {
-      await updateCategory(item.id, { name });
-      refreshCatalog();
-    } catch (error) {
-      setCategoryError(getApiErrorMessage(error, "Не удалось обновить категорию"));
-    }
+    setCategoryEditForm({ id: item.id, name: item.name });
   };
 
   const onDeleteCategory = async (item) => {
@@ -398,16 +419,7 @@ export default function CatalogPage() {
   };
 
   const onRenameSubcategory = async (item) => {
-    const name = window.prompt("Новое имя подкатегории", item.name);
-    if (!name || name === item.name) return;
-
-    setSubcategoryError("");
-    try {
-      await updateSubcategory(item.id, { name });
-      refreshCatalog();
-    } catch (error) {
-      setSubcategoryError(getApiErrorMessage(error, "Не удалось обновить подкатегорию"));
-    }
+    setSubcategoryEditForm({ id: item.id, name: item.name });
   };
 
   const onEditSubcategoryImage = async (item) => {
@@ -474,17 +486,11 @@ export default function CatalogPage() {
   };
 
   const onEditProduct = async (item) => {
-    const name = window.prompt("Название", item.name) ?? item.name;
-    const description =
-      window.prompt("Описание", item.description ?? "") ?? item.description;
-
-    setProductError("");
-    try {
-      await updateProduct(item.id, { name, description });
-      refreshCatalog();
-    } catch (error) {
-      setProductError(getApiErrorMessage(error, "Не удалось обновить товар"));
-    }
+    setProductEditForm({
+      id: item.id,
+      name: item.name,
+      description: item.description ?? "",
+    });
   };
 
   const onUploadProductImage = async (item, imageFileId) => {
@@ -512,6 +518,53 @@ export default function CatalogPage() {
     }
   };
 
+  const onSaveCategoryEdit = async (e) => {
+    e.preventDefault();
+    if (!categoryEditForm?.name?.trim()) return;
+
+    setCategoryError("");
+    try {
+      await updateCategory(categoryEditForm.id, { name: categoryEditForm.name.trim() });
+      setCategoryEditForm(null);
+      refreshCatalog();
+    } catch (error) {
+      setCategoryError(getApiErrorMessage(error, "Не удалось обновить категорию"));
+    }
+  };
+
+  const onSaveSubcategoryEdit = async (e) => {
+    e.preventDefault();
+    if (!subcategoryEditForm?.name?.trim()) return;
+
+    setSubcategoryError("");
+    try {
+      await updateSubcategory(subcategoryEditForm.id, {
+        name: subcategoryEditForm.name.trim(),
+      });
+      setSubcategoryEditForm(null);
+      refreshCatalog();
+    } catch (error) {
+      setSubcategoryError(getApiErrorMessage(error, "Не удалось обновить подкатегорию"));
+    }
+  };
+
+  const onSaveProductEdit = async (e) => {
+    e.preventDefault();
+    if (!productEditForm?.name?.trim()) return;
+
+    setProductError("");
+    try {
+      await updateProduct(productEditForm.id, {
+        name: productEditForm.name.trim(),
+        description: productEditForm.description.trim() || null,
+      });
+      setProductEditForm(null);
+      refreshCatalog();
+    } catch (error) {
+      setProductError(getApiErrorMessage(error, "Не удалось обновить товар"));
+    }
+  };
+
   return (
     <section>
       <h2 className="page-title">Каталог</h2>
@@ -521,10 +574,10 @@ export default function CatalogPage() {
         <article className="card">
           <h3>Категории</h3>
 
-          <form className="inline-form" onSubmit={onCreateCategory}>
-            <input
+          <form className="stack-form" onSubmit={onCreateCategory}>
+            <TextAssistField
               value={categoryName}
-              onChange={(e) => setCategoryName(e.target.value)}
+              onChange={setCategoryName}
               placeholder="Новая категория"
             />
             <button type="submit">Добавить</button>
@@ -596,9 +649,9 @@ export default function CatalogPage() {
           <h3>Подкатегории</h3>
 
           <form className="stack-form" onSubmit={onCreateSubcategory}>
-            <input
+            <TextAssistField
               value={subcategoryName}
-              onChange={(e) => setSubcategoryName(e.target.value)}
+              onChange={setSubcategoryName}
               placeholder="Новая подкатегория"
             />
             <select
@@ -784,19 +837,20 @@ export default function CatalogPage() {
         <p className="muted">{productsLoading ? "Загрузка..." : productResultsLabel}</p>
 
         <form className="stack-form" onSubmit={onCreateProduct}>
-          <input
+          <TextAssistField
             placeholder="Название"
             value={productForm.name}
-            onChange={(e) =>
-              setProductForm((prev) => ({ ...prev, name: e.target.value }))
+            onChange={(value) =>
+              setProductForm((prev) => ({ ...prev, name: value }))
             }
           />
-          <textarea
+          <TextAssistField
             placeholder="Описание"
             value={productForm.description}
-            onChange={(e) =>
-              setProductForm((prev) => ({ ...prev, description: e.target.value }))
+            onChange={(value) =>
+              setProductForm((prev) => ({ ...prev, description: value }))
             }
+            multiline
             rows={3}
           />
           <input
@@ -926,6 +980,66 @@ export default function CatalogPage() {
           </button>
         </div>
       </article>
+
+      {categoryEditForm && (
+        <EditorDialog
+          title="Редактировать категорию"
+          onClose={() => setCategoryEditForm(null)}
+          onSubmit={onSaveCategoryEdit}
+          submitLabel="Сохранить категорию"
+        >
+          <TextAssistField
+            value={categoryEditForm.name}
+            onChange={(value) =>
+              setCategoryEditForm((prev) => ({ ...prev, name: value }))
+            }
+            placeholder="Название категории"
+          />
+        </EditorDialog>
+      )}
+
+      {subcategoryEditForm && (
+        <EditorDialog
+          title="Редактировать подкатегорию"
+          onClose={() => setSubcategoryEditForm(null)}
+          onSubmit={onSaveSubcategoryEdit}
+          submitLabel="Сохранить подкатегорию"
+        >
+          <TextAssistField
+            value={subcategoryEditForm.name}
+            onChange={(value) =>
+              setSubcategoryEditForm((prev) => ({ ...prev, name: value }))
+            }
+            placeholder="Название подкатегории"
+          />
+        </EditorDialog>
+      )}
+
+      {productEditForm && (
+        <EditorDialog
+          title="Редактировать товар"
+          onClose={() => setProductEditForm(null)}
+          onSubmit={onSaveProductEdit}
+          submitLabel="Сохранить товар"
+        >
+          <TextAssistField
+            value={productEditForm.name}
+            onChange={(value) =>
+              setProductEditForm((prev) => ({ ...prev, name: value }))
+            }
+            placeholder="Название товара"
+          />
+          <TextAssistField
+            value={productEditForm.description}
+            onChange={(value) =>
+              setProductEditForm((prev) => ({ ...prev, description: value }))
+            }
+            placeholder="Описание товара"
+            multiline
+            rows={4}
+          />
+        </EditorDialog>
+      )}
     </section>
   );
 }
