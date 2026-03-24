@@ -33,22 +33,22 @@ const TECH_EMOJI_OPTIONS = [
   "✨",
 ];
 
-const SALES_PHRASE_OPTIONS = [
-  "Хит продаж",
-  "Лучшая цена",
-  "Выбор покупателей",
-  "Премиальное качество",
-  "Ограниченное предложение",
-  "Гарантия производителя",
-  "Идеально для дома и офиса",
-  "В наличии сейчас",
-  "Быстрая доставка",
-  "Надежный выбор на каждый день",
-  "Отличный подарок",
-  "Новинка сезона",
-  "Топовая модель",
-  "Рекомендуем",
-  "Максимум пользы за свои деньги",
+const SALES_EMOJI_OPTIONS = [
+  "🔥",
+  "💥",
+  "✅",
+  "💚",
+  "⭐",
+  "🌟",
+  "⚡",
+  "🏷️",
+  "🛍️",
+  "🛒",
+  "🎁",
+  "🚚",
+  "📦",
+  "💎",
+  "📣",
 ];
 
 function buildNextValue(currentValue, snippet, start, end) {
@@ -68,8 +68,8 @@ export default function TextAssistField({
   value,
   onChange,
   multiline = false,
-  showPhrases = true,
-  assistLabel = "Эмодзи и фразы",
+  showSalesEmojis = true,
+  assistLabel = "Эмодзи и подсказки",
   rows = 3,
   ...inputProps
 }) {
@@ -118,7 +118,7 @@ export default function TextAssistField({
         {open && (
           <div className="assist-panel" id={panelId}>
             <div className="assist-section">
-              <p className="assist-heading">Эмодзи</p>
+              <p className="assist-heading">Эмодзи по теме техники</p>
               <div className="assist-chip-list">
                 {TECH_EMOJI_OPTIONS.map((item) => (
                   <button
@@ -133,15 +133,15 @@ export default function TextAssistField({
               </div>
             </div>
 
-            {showPhrases && (
+            {showSalesEmojis && (
               <div className="assist-section">
-                <p className="assist-heading">Готовые фразы</p>
+                <p className="assist-heading">Продающие эмодзи</p>
                 <div className="assist-chip-list">
-                  {SALES_PHRASE_OPTIONS.map((item) => (
+                  {SALES_EMOJI_OPTIONS.map((item) => (
                     <button
                       key={item}
                       type="button"
-                      className="assist-chip assist-chip-text"
+                      className="assist-chip"
                       onClick={() => handleInsert(item)}
                     >
                       {item}

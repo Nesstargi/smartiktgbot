@@ -99,7 +99,7 @@ describe("CatalogPage", () => {
     render(<CatalogPage />);
 
     const categoryInput = await screen.findByPlaceholderText("Новая категория");
-    await user.click(screen.getAllByRole("button", { name: "Эмодзи и фразы" })[0]);
+    await user.click(screen.getAllByRole("button", { name: "Эмодзи и подсказки" })[0]);
     await user.click(screen.getByRole("button", { name: "📱" }));
 
     expect(categoryInput).toHaveValue("📱");
