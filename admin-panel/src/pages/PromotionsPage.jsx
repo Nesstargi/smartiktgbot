@@ -7,10 +7,37 @@ import {
   getPromotions,
   updatePromotion,
 } from "../api/promotions.api";
+import TextAssistField from "../components/TextAssistField";
 import UploadField from "../components/UploadField";
 import { buildMediaUrl } from "../utils/media";
 
 const PAGE_SIZE = 10;
+
+function EditorDialog({ title, onClose, onSubmit, submitLabel, children }) {
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <div className="dialog-card" role="dialog" aria-modal="true" aria-label={title}>
+        <div className="dialog-header">
+          <h4>{title}</h4>
+          <button type="button" onClick={onClose}>
+            Закрыть
+          </button>
+        </div>
+
+        <form className="stack-form" onSubmit={onSubmit}>
+          {children}
+
+          <div className="dialog-actions">
+            <button type="button" onClick={onClose}>
+              Отмена
+            </button>
+            <button type="submit">{submitLabel}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 export default function PromotionsPage() {
   const [items, setItems] = useState([]);
@@ -23,6 +50,7 @@ export default function PromotionsPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(0);
   const [reloadToken, setReloadToken] = useState(0);
+  const [editForm, setEditForm] = useState(null);
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -129,17 +157,11 @@ export default function PromotionsPage() {
   };
 
   const onEdit = async (item) => {
-    const title = window.prompt("Название", item.title) ?? item.title;
-    const description =
-      window.prompt("Описание", item.description ?? "") ?? item.description;
-
-    setListError("");
-    try {
-      await updatePromotion(item.id, { title, description });
-      refreshPromotions();
-    } catch (error) {
-      setListError(getApiErrorMessage(error, "Не удалось обновить акцию"));
-    }
+    setEditForm({
+      id: item.id,
+      title: item.title ?? "",
+      description: item.description ?? "",
+    });
   };
 
   const onUploadImage = async (item, image_url) => {
@@ -178,24 +200,43 @@ export default function PromotionsPage() {
     }
   };
 
+  const onSaveEdit = async (e) => {
+    e.preventDefault();
+    if (!editForm?.title?.trim()) {
+      setListError("Введите название акции");
+      return;
+    }
+
+    setListError("");
+    try {
+      await updatePromotion(editForm.id, {
+        title: editForm.title.trim(),
+        description: editForm.description.trim() || null,
+      });
+      setEditForm(null);
+      refreshPromotions();
+    } catch (error) {
+      setListError(getApiErrorMessage(error, "Не удалось обновить акцию"));
+    }
+  };
+
   return (
     <section>
       <h2 className="page-title">Акции</h2>
 
       <article className="card">
         <form className="stack-form" onSubmit={onCreate}>
-          <input
+          <TextAssistField
             placeholder="Название акции"
             value={form.title}
-            onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
+            onChange={(value) => setForm((prev) => ({ ...prev, title: value }))}
           />
-          <textarea
+          <TextAssistField
             rows={3}
             placeholder="Описание"
             value={form.description}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, description: e.target.value }))
-            }
+            onChange={(value) => setForm((prev) => ({ ...prev, description: value }))}
+            multiline
           />
           <input
             placeholder="URL фото (или загрузите ниже)"
@@ -346,6 +387,28 @@ export default function PromotionsPage() {
           </button>
         </div>
       </article>
+
+      {editForm && (
+        <EditorDialog
+          title="Редактировать акцию"
+          onClose={() => setEditForm(null)}
+          onSubmit={onSaveEdit}
+          submitLabel="Сохранить акцию"
+        >
+          <TextAssistField
+            value={editForm.title}
+            onChange={(value) => setEditForm((prev) => ({ ...prev, title: value }))}
+            placeholder="Название акции"
+          />
+          <TextAssistField
+            value={editForm.description}
+            onChange={(value) => setEditForm((prev) => ({ ...prev, description: value }))}
+            placeholder="Описание"
+            multiline
+            rows={4}
+          />
+        </EditorDialog>
+      )}
     </section>
   );
 }

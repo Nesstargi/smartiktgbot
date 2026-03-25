@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 import { getApiErrorMessage } from "../api/axios";
 import { broadcastNotification } from "../api/notifications.api";
+import TextAssistField from "../components/TextAssistField";
 import UploadField from "../components/UploadField";
 import { buildMediaUrl } from "../utils/media";
 
@@ -91,23 +92,24 @@ export default function NotificationsPage() {
 
       <article className="card settings-card">
         <form className="stack-form" onSubmit={onSend}>
-          <input
+          <TextAssistField
             placeholder="Заголовок"
             value={form.title}
             maxLength={TITLE_LIMIT}
-            onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
+            onChange={(value) => setForm((prev) => ({ ...prev, title: value }))}
           />
           <div className="counter-row">
             <span className="muted">Короткий заголовок для уведомления</span>
             <span className="muted">{titleLength}/{TITLE_LIMIT}</span>
           </div>
 
-          <textarea
+          <TextAssistField
             rows={5}
             placeholder="Текст уведомления"
             value={form.message}
             maxLength={MESSAGE_LIMIT}
-            onChange={(e) => setForm((prev) => ({ ...prev, message: e.target.value }))}
+            onChange={(value) => setForm((prev) => ({ ...prev, message: value }))}
+            multiline
           />
           <div className="counter-row">
             <span className="muted">Основное сообщение рассылки</span>

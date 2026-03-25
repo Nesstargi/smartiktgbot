@@ -10,6 +10,18 @@ vi.mock("../api/notifications.api", () => ({
 }));
 
 describe("NotificationsPage", () => {
+  test("allows inserting emoji into notification title", async () => {
+    const user = userEvent.setup();
+
+    render(<NotificationsPage />);
+
+    const titleInput = screen.getByPlaceholderText("Заголовок");
+    await user.click(screen.getAllByRole("button", { name: "Эмодзи и подсказки" })[0]);
+    await user.click(screen.getByRole("button", { name: "📣" }));
+
+    expect(titleInput).toHaveValue("📣");
+  });
+
   test("submits broadcast and shows result summary", async () => {
     const user = userEvent.setup();
 
