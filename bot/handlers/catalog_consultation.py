@@ -6,7 +6,7 @@ from aiogram import F
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from bot.api_client import create_lead, get_bot_settings
-from bot.handlers.menu import menu
+from bot.handlers.menu import main_menu_reply_markup
 
 from .catalog_common import (
     DEFAULT_ABOUT_MESSAGE,
@@ -130,7 +130,7 @@ async def start_consultation(message: Message):
     except Exception:
         text = f"{template}\n\nТелефон: {phone}"
 
-    await message.answer(text, reply_markup=menu)
+    await message.answer(text, reply_markup=main_menu_reply_markup(message))
 
 
 @router.message(F.text == "ℹ️ О компании")
@@ -145,7 +145,7 @@ async def show_about(message: Message):
         settings = {}
 
     text = settings.get("about_message") or DEFAULT_ABOUT_MESSAGE
-    await message.answer(text, reply_markup=menu)
+    await message.answer(text, reply_markup=main_menu_reply_markup(message))
 
 
 @router.message(F.reply_to_message, F.text)
@@ -200,7 +200,10 @@ async def back_to_main_from_keyboard(message: Message):
     if message.from_user:
         schedule_bot_subscriber_sync(chat=message.chat, user=message.from_user)
         await clear_consultation_waiting(message.from_user.id)
-    await message.answer("🏠 Главное меню\n\nВыберите пункт меню 👇", reply_markup=menu)
+    await message.answer(
+        "🏠 Главное меню\n\nВыберите пункт меню 👇",
+        reply_markup=main_menu_reply_markup(message),
+    )
 
 
 @router.message(F.text)
@@ -293,5 +296,5 @@ async def handle_contact(message: Message):
 
     await message.answer(
         "✅ Заявка отправлена!\n\nНаш менеджер скоро свяжется с вами 📞",
-        reply_markup=menu,
+        reply_markup=main_menu_reply_markup(message),
     )

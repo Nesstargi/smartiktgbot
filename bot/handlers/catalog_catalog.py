@@ -1,7 +1,7 @@
 from aiogram import F
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from bot.handlers.menu import menu
+from bot.handlers.menu import main_menu_reply_markup
 
 from .catalog_common import (
     categories_cache,
@@ -127,7 +127,10 @@ async def back_to_main(callback: CallbackQuery):
     await safe_callback_answer(callback)
     await touch_catalog_activity(callback.from_user.id, callback.bot, callback.message.chat.id)
     await clear_consultation_waiting(callback.from_user.id)
-    await callback.message.answer("🏠 Главное меню\n\nВыберите пункт меню 👇", reply_markup=menu)
+    await callback.message.answer(
+        "🏠 Главное меню\n\nВыберите пункт меню 👇",
+        reply_markup=main_menu_reply_markup(callback.message),
+    )
 
 
 @router.callback_query(F.data == "back_categories")

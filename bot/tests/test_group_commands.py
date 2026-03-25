@@ -1,6 +1,8 @@
 import asyncio
 from types import SimpleNamespace
 
+from aiogram.types import ReplyKeyboardRemove
+
 from bot.handlers import menu as menu_handler
 
 
@@ -33,7 +35,7 @@ def test_group_start_shows_available_commands(monkeypatch):
 
     assert "/stats" in message.answers[0]["text"]
     assert "/orders" in message.answers[0]["text"]
-    assert message.answers[0]["reply_markup"] is None
+    assert isinstance(message.answers[0]["reply_markup"], ReplyKeyboardRemove)
 
 
 def test_group_users_returns_bot_user_count(monkeypatch):
@@ -47,7 +49,8 @@ def test_group_users_returns_bot_user_count(monkeypatch):
 
     asyncio.run(menu_handler.group_users(message))
 
-    assert message.answers == [{"text": "Пользователей бота: 17", "reply_markup": None}]
+    assert message.answers[0]["text"] == "Пользователей бота: 17"
+    assert isinstance(message.answers[0]["reply_markup"], ReplyKeyboardRemove)
 
 
 def test_group_orders_formats_recent_leads(monkeypatch):
@@ -84,6 +87,7 @@ def test_group_orders_formats_recent_leads(monkeypatch):
     assert "Последние заявки: 2 из 2" in text
     assert "Иван" in text
     assert "+79990000002" in text
+    assert isinstance(message.answers[0]["reply_markup"], ReplyKeyboardRemove)
 
 
 def test_group_orders_rejects_invalid_limit(monkeypatch):
@@ -93,3 +97,4 @@ def test_group_orders_rejects_invalid_limit(monkeypatch):
     asyncio.run(menu_handler.group_orders(message))
 
     assert "Использование: /orders" in message.answers[0]["text"]
+    assert isinstance(message.answers[0]["reply_markup"], ReplyKeyboardRemove)

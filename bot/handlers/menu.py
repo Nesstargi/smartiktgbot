@@ -2,7 +2,7 @@ from datetime import datetime
 
 from aiogram import Router
 from aiogram.filters import Command, CommandStart
-from aiogram.types import KeyboardButton, Message, ReplyKeyboardMarkup
+from aiogram.types import KeyboardButton, Message, ReplyKeyboardMarkup, ReplyKeyboardRemove
 
 from bot.api_client import get_bot_admin_overview, get_bot_settings
 from bot.handlers.catalog_common import schedule_bot_subscriber_sync
@@ -25,11 +25,11 @@ menu = ReplyKeyboardMarkup(
 )
 
 
-def _is_group_chat(message: Message) -> bool:
+def is_group_chat(message: Message) -> bool:
     return str(getattr(message.chat, "type", "")) in GROUP_CHAT_TYPES
 
 
-def _group_help_text() -> str:
+def group_help_text() -> str:
     return (
         "Бот подключен к группе.\n\n"
         "Доступные команды:\n"
@@ -41,6 +41,14 @@ def _group_help_text() -> str:
     )
 
 
+def group_menu_remove() -> ReplyKeyboardRemove:
+    return ReplyKeyboardRemove()
+
+
+def main_menu_reply_markup(message: Message):
+    return group_menu_remove() if is_group_chat(message) else menu
+
+
 async def _is_group_admin(message: Message) -> bool:
     if not message.from_user:
         return False
@@ -50,7 +58,7 @@ async def _is_group_admin(message: Message) -> bool:
 
 
 async def _ensure_group_admin(message: Message) -> bool:
-    if not _is_group_chat(message):
+    if not is_group_chat(message):
         await message.answer("Эта команда доступна только в группе с ботом.")
         return False
 
@@ -121,8 +129,8 @@ async def start(msg: Message):
     if msg.from_user:
         schedule_bot_subscriber_sync(chat=msg.chat, user=msg.from_user)
 
-    if _is_group_chat(msg):
-        await msg.answer(_group_help_text())
+    if is_group_chat(msg):
+        await msg.answer(group_help_text(), reply_markup=group_menu_remove())
         return
 
     text = "Добро пожаловать! Выберите пункт меню 👇"
@@ -133,16 +141,16 @@ async def start(msg: Message):
     except Exception:
         pass
 
-    await msg.answer(text, reply_markup=menu)
+    await msg.answer(text, reply_markup=main_menu_reply_markup(msg))
 
 
 @router.message(Command("help"))
 async def help_command(message: Message):
-    if _is_group_chat(message):
-        await message.answer(_group_help_text())
+    if is_group_chat(message):
+        await message.answer(group_help_text(), reply_markup=group_menu_remove())
         return
 
-    await message.answer("Используйте меню ниже для работы с ботом.", reply_markup=menu)
+    await message.answer("Используйте меню ниже для работы с ботом.", reply_markup=main_menu_reply_markup(message))
 
 
 @router.message(Command("stats"))
@@ -154,7 +162,8 @@ async def group_stats(message: Message):
     await message.answer(
         "Сводка по боту\n\n"
         f"Пользователей бота: {overview.get('bot_users', 0)}\n"
-        f"Всего заявок: {overview.get('leads_total', 0)}"
+        f"Всего заявок: {overview.get('leads_total', 0)}",
+        reply_markup=group_menu_remove(),
     )
 
 
@@ -164,7 +173,10 @@ async def group_users(message: Message):
         return
 
     overview = await get_bot_admin_overview(limit=1)
-    await message.answer(f"Пользователей бота: {overview.get('bot_users', 0)}")
+    await message.answer(
+        f"Пользователей бота: {overview.get('bot_users', 0)}",
+        reply_markup=group_menu_remove(),
+    )
 
 
 @router.message(Command("orders"))
@@ -175,9 +187,10 @@ async def group_orders(message: Message):
     limit = _parse_orders_limit(message.text)
     if limit is None:
         await message.answer(
-            "Использование: /orders или /orders 5\nМожно запрашивать от 1 до 20 заявок."
+            "Использование: /orders или /orders 5\nМожно запрашивать от 1 до 20 заявок.",
+            reply_markup=group_menu_remove(),
         )
         return
 
     overview = await get_bot_admin_overview(limit=limit)
-    await message.answer(_format_recent_leads(overview))
+    await message.answer(_format_recent_leads(overview), reply_markup=group_menu_remove())
