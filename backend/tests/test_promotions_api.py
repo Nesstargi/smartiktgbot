@@ -186,3 +186,42 @@ def test_promotion_update_rejects_duplicate_title(
 
     assert response.status_code == 409
     assert response.json()["detail"] == "Promotion with this title already exists"
+
+
+def test_promotion_update_clears_stale_image_file_id_when_image_changes(
+    client,
+    create_user,
+    auth_headers,
+    db_session,
+):
+    admin = create_user(
+        email="promo-image@example.com",
+        password="secret123",
+        roles=["admin"],
+        permissions=[PERMISSION_MANAGE_PROMOTIONS],
+    )
+    headers = auth_headers(admin["email"], admin["password"])
+
+    promotion = Promotion(
+        title="Promo Image",
+        description="Old image",
+        image_url="/media/old.jpg",
+        image_file_id="stale-file-id",
+        is_active=True,
+    )
+    db_session.add(promotion)
+    db_session.commit()
+    db_session.refresh(promotion)
+
+    response = client.put(
+        f"/admin/promotions/{promotion.id}",
+        headers=headers,
+        json={"image_url": "/media/new.jpg"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["image_url"] == "/media/new.jpg"
+    assert response.json()["image_file_id"] is None
+
+    db_session.refresh(promotion)
+    assert promotion.image_file_id is None

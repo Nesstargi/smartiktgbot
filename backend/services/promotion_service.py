@@ -63,6 +63,15 @@ class PromotionService:
                     detail="Promotion with this title already exists",
                 )
 
+        # image_file_id is a Telegram-side cache for the current image_url.
+        # If the promotion image changes, drop the cached file_id so the bot can refresh it.
+        if (
+            "image_url" in payload
+            and payload["image_url"] != item.image_url
+            and "image_file_id" not in payload
+        ):
+            payload["image_file_id"] = None
+
         for key, value in payload.items():
             setattr(item, key, value)
 
