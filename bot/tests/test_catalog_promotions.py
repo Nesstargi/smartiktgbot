@@ -78,4 +78,74 @@ def test_show_promotions_falls_back_to_image_url_when_file_id_is_stale(monkeypat
     assert [call["photo"] for call in send_calls] == ["stale-photo", "stale-photo", "fresh-photo"]
     assert remembered == [("/media/promo.jpg", "new-file-id")]
     assert updated == [(10, "new-file-id")]
-    assert message.answers == [{"text": "🔥 *Акции*", "parse_mode": "Markdown"}]
+    assert message.answers == [{"text": "🔥 Акции", "parse_mode": None}]
+
+
+def test_show_promotions_does_not_duplicate_photo_when_text_fallback_is_needed(monkeypatch):
+    promotions = [
+        {
+            "id": 11,
+            "title": "Акция [1]",
+            "description": "Цена < 1000",
+            "image_url": "/media/promo.jpg",
+            "image_file_id": "valid-file-id",
+        }
+    ]
+    send_calls = []
+
+    monkeypatch.setattr(catalog_promotions, "schedule_bot_subscriber_sync", lambda **kwargs: None)
+
+    async def fake_clear_consultation_waiting(_user_id):
+        return None
+
+    async def fake_get_promotions(force_refresh=False):
+        assert force_refresh is True
+        return promotions
+
+    async def fake_photo_payload(photo_ref):
+        if photo_ref == "valid-file-id":
+            return "primary-photo"
+        if photo_ref == "/media/promo.jpg":
+            return "fallback-photo"
+        return None
+
+    async def fake_send_photo_with_fallback(message, photo, **kwargs):
+        send_calls.append({"photo": photo, "kwargs": kwargs})
+        if photo == "primary-photo" and kwargs.get("caption") is not None:
+            return None
+        if photo == "primary-photo" and kwargs.get("caption") is None:
+            return FakeSentMessage("primary-file-id")
+        if photo == "fallback-photo":
+            return FakeSentMessage("fallback-file-id")
+        return None
+
+    async def fake_remember_sent_photo(_image_url, _sent):
+        return None
+
+    async def fake_update_promotion_file_id(_promotion_id, _image_file_id):
+        return None
+
+    original_answer = FakeMessage.answer
+
+    async def fake_answer(self, text, parse_mode=None):
+        if parse_mode == "HTML" and text.startswith("<b>Акция [1]</b>"):
+            raise RuntimeError("HTML send failed")
+        await original_answer(self, text, parse_mode=parse_mode)
+
+    monkeypatch.setattr(catalog_promotions, "clear_consultation_waiting", fake_clear_consultation_waiting)
+    monkeypatch.setattr(catalog_promotions, "get_promotions", fake_get_promotions)
+    monkeypatch.setattr(catalog_promotions, "photo_payload", fake_photo_payload)
+    monkeypatch.setattr(catalog_promotions, "send_photo_with_fallback", fake_send_photo_with_fallback)
+    monkeypatch.setattr(catalog_promotions, "remember_sent_photo", fake_remember_sent_photo)
+    monkeypatch.setattr(catalog_promotions, "update_promotion_file_id", fake_update_promotion_file_id)
+    monkeypatch.setattr(FakeMessage, "answer", fake_answer)
+
+    message = FakeMessage()
+
+    asyncio.run(catalog_promotions.show_promotions(message))
+
+    assert [call["photo"] for call in send_calls] == ["primary-photo", "primary-photo"]
+    assert message.answers == [
+        {"text": "🔥 Акции", "parse_mode": None},
+        {"text": "Акция [1]\nЦена < 1000", "parse_mode": None},
+    ]

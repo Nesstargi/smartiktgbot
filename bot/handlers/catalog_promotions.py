@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from html import escape
 
 from aiogram import F
 from aiogram.types import Message
@@ -18,14 +19,50 @@ from .catalog_common import (
 logger = logging.getLogger(__name__)
 
 
-async def _send_promotion_photo(message: Message, photo, text: str, image_url: str | None):
-    if len(text) <= 1024:
+def _promotion_texts(item: dict) -> tuple[str, str]:
+    title = str(item.get("title") or "Без названия")
+    desc = str(item.get("description") or "")
+
+    plain_text = "\n".join(part for part in (title, desc) if part).strip()
+    html_title = escape(title)
+    html_desc = escape(desc)
+    html_text = "\n".join(
+        part
+        for part in (f"<b>{html_title}</b>", html_desc)
+        if part
+    ).strip()
+    return html_text, plain_text or title
+
+
+async def _send_promotion_text(message: Message, html_text: str, plain_text: str) -> bool:
+    try:
+        await message.answer(html_text, parse_mode="HTML")
+        return True
+    except Exception:
+        logger.debug("Failed to send promotion text with HTML formatting", exc_info=True)
+
+    try:
+        await message.answer(plain_text)
+        return True
+    except Exception:
+        logger.debug("Failed to send promotion text without formatting", exc_info=True)
+        return False
+
+
+async def _send_promotion_photo(
+    message: Message,
+    photo,
+    html_text: str,
+    plain_text: str,
+    image_url: str | None,
+):
+    if len(html_text) <= 1024:
         sent = await send_photo_with_fallback(
             message,
             photo,
-            caption=text,
+            caption=html_text,
             image_url=image_url,
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
         if sent:
             return sent
@@ -35,10 +72,10 @@ async def _send_promotion_photo(message: Message, photo, text: str, image_url: s
         photo,
         caption=None,
         image_url=image_url,
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
     if sent:
-        await message.answer(text, parse_mode="Markdown")
+        await _send_promotion_text(message, html_text, plain_text)
     return sent
 
 
@@ -52,7 +89,7 @@ async def show_promotions(message: Message):
         await message.answer("Сейчас активных акций нет.")
         return
 
-    await message.answer("🔥 *Акции*", parse_mode="Markdown")
+    await message.answer("🔥 Акции")
 
     photo_tasks: list[asyncio.Task | None] = []
     image_url_fallback_tasks: list[asyncio.Task | None] = []
@@ -68,9 +105,7 @@ async def show_promotions(message: Message):
         )
 
     for item, task, fallback_task in zip(promotions, photo_tasks, image_url_fallback_tasks):
-        title = item.get("title", "Без названия")
-        desc = item.get("description") or ""
-        text = f"*{title}*\n{desc}".strip()
+        html_text, plain_text = _promotion_texts(item)
         image_url = item.get("image_url")
         image_file_id = item.get("image_file_id")
         sent = None
@@ -88,7 +123,13 @@ async def show_promotions(message: Message):
 
         if photo:
             try:
-                sent = await _send_promotion_photo(message, photo, text, image_url)
+                sent = await _send_promotion_photo(
+                    message,
+                    photo,
+                    html_text,
+                    plain_text,
+                    image_url,
+                )
             except Exception:
                 logger.debug(
                     "Failed to send promotion photo via primary ref for promotion_id=%s",
@@ -109,7 +150,13 @@ async def show_promotions(message: Message):
 
             if fallback_photo:
                 try:
-                    sent = await _send_promotion_photo(message, fallback_photo, text, image_url)
+                    sent = await _send_promotion_photo(
+                        message,
+                        fallback_photo,
+                        html_text,
+                        plain_text,
+                        image_url,
+                    )
                     used_image_url_fallback = bool(sent)
                 except Exception:
                     logger.debug(
@@ -132,4 +179,4 @@ async def show_promotions(message: Message):
                 item["image_file_id"] = file_id
             continue
 
-        await message.answer(text, parse_mode="Markdown")
+        await _send_promotion_text(message, html_text, plain_text)
