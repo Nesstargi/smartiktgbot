@@ -141,8 +141,3 @@ async def back_categories(callback: CallbackQuery):
     await touch_catalog_activity(callback.from_user.id, callback.bot, callback.message.chat.id)
     await show_categories(callback.message)
 
-
-@router.message(F.photo)
-async def get_file_id(message: Message):
-    file_id = message.photo[-1].file_id
-    await message.answer(f"FILE_ID:\n{file_id}")
